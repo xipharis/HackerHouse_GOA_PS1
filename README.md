@@ -1,5 +1,7 @@
 # HH Goa 2026 — Frame & Builder Pass Generator
 
+### → **[hh-goa-frame-mu.vercel.app](https://hh-goa-frame-mu.vercel.app)**
+
 Upload a photo, get a branded HH Goa 2026 graphic, download it, post it to X.
 
 Styled to the organiser's identity: the deep green (`#0B6839`), signal yellow
@@ -10,9 +12,9 @@ event site uses — **Imbue** for display and **Victor Mono** for everything els
 
 | Route | What it is |
 | --- | --- |
-| `/` | Landing page with the two entry points |
-| `/pfp` | **Format A** — 1024×1024 profile picture in a signal-yellow ring |
-| `/pass` | **Format B** — 1200×675 builder pass (name, stack, origin, builder title, travel dates) |
+| [`/`](https://hh-goa-frame-mu.vercel.app) | Landing page with the two entry points |
+| [`/pfp`](https://hh-goa-frame-mu.vercel.app/pfp) | **Format A** — 1024×1024 profile picture in a signal-yellow ring |
+| [`/pass`](https://hh-goa-frame-mu.vercel.app/pass) | **Format B** — 1200×675 builder pass (name, stack, origin, builder title, travel dates) |
 | `/s/[id]` | The link you tweet; its `og:image` *is* the generated graphic |
 
 The pass carries the event's travel window: **arrives 28 Oct 2026 → departs
@@ -38,21 +40,35 @@ loading screen.
 
 ### Share to X
 
-X's web intent cannot attach an image, so "Share to X" uploads the generated
-1200×675 graphic, then opens the compose intent pre-filled with a caption,
-`#FrameInGoa`, a tag for [@247pmstudio](https://x.com/247pmstudio), and a link to
-`/s/<id>` whose `og:image` is that graphic — the preview shows the real artwork,
-never a default thumbnail.
+Two buttons, because no single mechanism does both jobs:
 
-Two details that matter in practice:
+- **Share to X** always opens the X compose intent, pre-filled. It uploads the
+  1200×675 graphic first and puts the resulting `/s/<id>` link in the body —
+  that link's `og:image` *is* the graphic, so the post shows the real artwork as
+  its preview card rather than a default thumbnail.
+- **Post with image attached** appears only on touch devices and hands the
+  actual JPEG to the share sheet via the Web Share API, producing a post with a
+  true image attachment.
 
-- The popup opens synchronously on click and its location is set after the
-  upload, so Safari doesn't swallow it as a blocked popup.
+The split matters: the Web Share API can carry a file but on desktop it opens
+the *operating system's* sheet (AirDrop, Mail, Messages), which frequently has no
+X entry at all. A button labelled "Share to X" must never depend on it.
+
+Four details that matter in practice:
+
+- The share image is pre-rendered ~400 ms after the artwork settles. Safari only
+  honours `navigator.share()` while the click's transient activation is alive,
+  and awaiting a canvas encode is enough to lose it.
+- The intent popup opens synchronously on click and its location is set after
+  the upload, so Safari doesn't swallow it as a blocked popup.
+- The link goes in the caption body, not the intent's `url` parameter — X
+  appends that parameter last and would push it below the hashtags.
 - Format A uploads a purpose-built 16:9 composition rather than the square
   avatar, so X never centre-crops the ring off.
 
-On devices that support it, "Share image directly…" hands the actual file to the
-X app's compose sheet via the Web Share API.
+Caption copy lives in `tweetText` in [lib/brand.ts](lib/brand.ts); the two
+formats differ only in their opening block and share everything from the "less
+noise, more signal" line down.
 
 ### Uploading
 
@@ -73,6 +89,18 @@ downscaled to a 2048px long edge, and every photo is `object-fit: cover` framed
 with drag-to-reposition and a zoom control — portrait, landscape and off-centre
 crops all work without pre-cropping.
 
+### Icons
+
+The favicon set is generated from the sunrise mark in `images/`:
+
+```bash
+npm run icons    # -> app/favicon.ico (64), app/icon.png (256), app/apple-icon.png (180)
+```
+
+It crops a square around the sun rather than centre-cropping the source, which
+would leave the sun too small to read at 16px. Next.js emits the `<link>` tags
+from those filenames automatically.
+
 ## Running it
 
 ```bash
@@ -86,25 +114,52 @@ images on the local filesystem under `.data/` and serves them from
 
 ### Production
 
+Deployed on Vercel — one project, no separate backend. The `/api/*` and `/s/[id]`
+routes run as functions alongside the static pages:
+
+```bash
+vercel deploy --prod
+```
+
 Set `BLOB_READ_WRITE_TOKEN` (a linked Vercel Blob store provides it
-automatically) and share images go to Blob's CDN instead. Optionally set
-`NEXT_PUBLIC_SITE_URL` to pin the canonical origin used in share links and OG
-tags; otherwise the app uses the project's production domain, falling back to the
-request host.
+automatically) and share images go to Blob's CDN instead of the filesystem.
+Optionally set `NEXT_PUBLIC_SITE_URL` to pin the canonical origin used in share
+links and OG tags; otherwise the app uses the project's production domain,
+falling back to the request host.
+
+**Deployment Protection must be off.** With Vercel SSO enabled every URL 302s to
+a login page, which breaks `POST /api/share` and stops X's crawler from fetching
+the OG image — the site appears to work for the logged-in owner and for nobody
+else:
+
+```bash
+vercel project protection disable --sso
+```
 
 ## Tests
 
 ```bash
 npm run fixtures                                    # generate a test photo
 npm run test:e2e -- http://localhost:3000           # full flow, both formats
-node scripts/check-upload.mjs http://localhost:3000/pfp webkit
+npm run test:share -- http://localhost:3000         # both share paths
+npm run test:upload -- http://localhost:3000/pfp webkit
+```
+
+All three accept a base URL, so the same suites run against the live site:
+
+```bash
+npm run test:e2e -- https://hh-goa-frame-mu.vercel.app
 ```
 
 `e2e.mjs` drives a real browser through the whole required flow for both formats
 and six photo shapes (portrait, landscape, square, 12 MP HEIC, 36 MP HEIC):
 render correctness and timing, long-name overflow, download, the X intent URL,
-the caption's hashtag and studio tag, and that the resulting `og:image` is a real
-1200×675 image served over HTTP.
+the caption's opening block and both hashtags landing last, and that the
+resulting `og:image` is a real 1200×675 image served over HTTP.
+
+`check-share.mjs` covers both share paths: it stubs a file-capable share sheet
+and asserts a real JPEG is handed over, then stubs a desktop sheet with no X
+entry and asserts Share to X ignores it and reaches the intent anyway.
 
 `check-upload.mjs` exists separately because the e2e suite calls `setInputFiles`
 directly on the input, which bypasses the click path — the exact path that once
