@@ -222,8 +222,11 @@ export default function Generator() {
     }
   };
 
-  const canShareFiles =
-    typeof navigator !== "undefined" && typeof navigator.canShare === "function";
+  // Resolved after mount: reading `navigator` during render would desync hydration.
+  const [canShareFiles, setCanShareFiles] = useState(false);
+  useEffect(() => {
+    setCanShareFiles(typeof navigator.canShare === "function");
+  }, []);
 
   /* ------------------------------------------------------------------ UI */
 

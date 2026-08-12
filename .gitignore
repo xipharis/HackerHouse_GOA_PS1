@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local test fixtures / share store
+.fixtures/
+.data/
+.playwright-mcp/

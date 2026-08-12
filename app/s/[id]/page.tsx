@@ -10,7 +10,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EVENT, OUT } from "@/lib/brand";
 import { getShare } from "@/lib/server/storage";
-import { siteUrl } from "@/lib/server/site";
+import { requestSiteUrl } from "@/lib/server/site";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -29,7 +29,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ? `${who ?? "A builder"} — ${share.title}. Make your own ${EVENT.hashtag} graphic.`
     : `Make your own ${EVENT.full} graphic. ${EVENT.hashtag}`;
 
-  const url = `${siteUrl()}/s/${id}`;
+  const origin = await requestSiteUrl();
+  const url = `${origin}/s/${id}`;
   const image = {
     url: share.imageUrl,
     width: OUT.cardW,
@@ -40,7 +41,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
-    metadataBase: new URL(siteUrl()),
+    metadataBase: new URL(origin),
     alternates: { canonical: url },
     openGraph: {
       type: "website",

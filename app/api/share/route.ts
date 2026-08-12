@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { getShare, newId, saveShare, type Format } from "@/lib/server/storage";
-import { siteUrl } from "@/lib/server/site";
+import { requestSiteUrl } from "@/lib/server/site";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       id,
       imageUrl: meta.imageUrl,
-      shareUrl: `${siteUrl()}/s/${id}`,
+      shareUrl: `${await requestSiteUrl()}/s/${id}`,
     });
   } catch (err) {
     console.error("share failed", err);

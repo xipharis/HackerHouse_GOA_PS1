@@ -9,7 +9,7 @@
 import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { siteUrl } from "./site";
+import { requestSiteUrl } from "./site";
 
 export type Format = "pfp" | "card";
 
@@ -67,7 +67,7 @@ export async function saveShare(
   await fs.writeFile(path.join(localDir, `${id}.png`), png);
   const full: ShareMeta = {
     id,
-    imageUrl: `${siteUrl()}/api/image/${id}`,
+    imageUrl: `${await requestSiteUrl()}/api/image/${id}`,
     createdAt,
     ...meta,
   };
