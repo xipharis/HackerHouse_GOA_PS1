@@ -51,6 +51,29 @@ const disp = (f: Fonts, weight: number, size: number) =>
 const mono = (f: Fonts, weight: number, size: number) =>
   `${weight} ${size}px ${f.mono}`;
 
+/* -------------------------------------------------------------- geometry */
+
+/** Format A ring metrics. */
+const RING_OUTER = OUT.pfp / 2 - 6;
+const RING_W = 60;
+const RING_MID = RING_OUTER - RING_W / 2;
+const PHOTO_R = RING_OUTER - RING_W + 2;
+
+/** Format B chrome. */
+const HEADER_H = 62;
+const PAD = 44;
+const CARD_PHOTO_W = 388;
+
+/**
+ * The box the photo is drawn into, in output pixels. The UI needs it to convert
+ * a drag in screen pixels into a focal-point change.
+ */
+export function photoWindow(format: "pfp" | "card") {
+  return format === "pfp"
+    ? { w: PHOTO_R * 2, h: PHOTO_R * 2 }
+    : { w: CARD_PHOTO_W, h: OUT.cardH - (HEADER_H + PAD) - PAD };
+}
+
 /* ------------------------------------------------------------- background */
 
 /** The shared night-ocean ground: deep vertical gradient + a warm horizon glow. */
@@ -95,11 +118,6 @@ export function renderPfp(canvas: HTMLCanvasElement, opts: RenderOpts) {
   const f = opts.fonts;
   const cx = S / 2;
   const cy = S / 2;
-
-  const RING_OUTER = S / 2 - 6; // 506
-  const RING_W = 60;
-  const RING_MID = RING_OUTER - RING_W / 2;
-  const PHOTO_R = RING_OUTER - RING_W + 2;
 
   ctx.clearRect(0, 0, S, S);
 
@@ -205,9 +223,6 @@ export function renderCard(
   const f = opts.fonts;
   const { name, stack, title, seed = 0 } = opts.fields;
 
-  const HEADER_H = 62;
-  const PAD = 44;
-
   ctx.clearRect(0, 0, W, H);
   paintNight(ctx, W, H);
 
@@ -248,7 +263,7 @@ export function renderCard(
   ctx.restore();
 
   /* --- photo panel --- */
-  const pw = 388;
+  const pw = CARD_PHOTO_W;
   const px = PAD;
   const py = HEADER_H + PAD;
   const ph = H - py - PAD;
