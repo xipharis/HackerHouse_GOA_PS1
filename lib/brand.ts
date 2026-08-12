@@ -18,7 +18,7 @@ export const EVENT = {
   host: "2:47 pm Studio",
   hostHandle: "@247pmstudio",
   /** Printed on the builder pass. */
-  arrival: "29 OCT 2026",
+  arrival: "28 OCT 2026",
   departure: "31 OCT 2026",
 } as const;
 

@@ -15,7 +15,7 @@ event site uses — **Imbue** for display and **Victor Mono** for everything els
 | `/pass` | **Format B** — 1200×675 builder pass (name, stack, origin, builder title, travel dates) |
 | `/s/[id]` | The link you tweet; its `og:image` *is* the generated graphic |
 
-The pass carries the event's travel window: **arrives 29 Oct 2026 → departs
+The pass carries the event's travel window: **arrives 28 Oct 2026 → departs
 31 Oct 2026**.
 
 ## How it works
