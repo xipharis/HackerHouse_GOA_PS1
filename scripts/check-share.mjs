@@ -83,7 +83,12 @@ try {
   check("opens the X intent", /\/intent\/(post|tweet)/.test(new URL(intent).pathname));
   check("did NOT hijack to the OS share sheet",
         (await p2.evaluate(() => window.__sharedDesktop)) === false);
-  check("caption survives the fallback", /Embracing the vibe/.test(text));
+  // This page is /pfp, which has its own opening line; the signal line is the
+  // part both formats share.
+  check("pfp caption survives the fallback",
+        /New PFP, same Hacker House @2026 energy/.test(text));
+  check("signal line survives the fallback",
+        /Embrace with me the vibe of Less noise and more signal/.test(text));
   check("link is in the body, not appended after the hashtags",
         text.trimEnd().endsWith("#FrameInGoa #HHGoa2026"));
 } catch (e) {

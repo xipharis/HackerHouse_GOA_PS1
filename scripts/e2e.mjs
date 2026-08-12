@@ -202,9 +202,14 @@ async function run() {
       /#HHGoa2026/.test(text)
         ? ok("caption carries #HHGoa2026")
         : bad(`#HHGoa2026 missing: ${text}`);
-      /Embracing the vibe of Hacker House/.test(text)
-        ? ok("caption uses the supplied template")
-        : bad(`template opening line missing: ${text.slice(0, 60)}`);
+      (label === "card"
+        ? /^😋Embracing the vibe of Hacker House @2026/.test(text)
+        : /^😋 New PFP, same Hacker House @2026 energy/.test(text))
+        ? ok(`caption uses the ${label} opening`)
+        : bad(`wrong opening line for ${label}: ${text.slice(0, 60)}`);
+      /Embrace with me the vibe of Less noise and more signal/.test(text)
+        ? ok("caption carries the signal line")
+        : bad("signal line missing from caption");
       text.trimEnd().endsWith("#FrameInGoa #HHGoa2026")
         ? ok("hashtags land last")
         : bad(`caption does not end with the hashtags: ${JSON.stringify(text.slice(-40))}`);

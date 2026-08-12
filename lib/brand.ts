@@ -61,8 +61,9 @@ export type Format = "pfp" | "card";
  * ordering — the hashtags have to land last. X still unfurls a URL found in the
  * body, so the link preview works either way.
  *
- * Detail lines are dropped when their field is blank, which is what makes the
- * same template usable for the PFP flow (no name/role/title collected).
+ * The two formats get their own opening block: the pass lists the details the
+ * user typed, while the PFP collects none, so it uses standing copy rather than
+ * the pass template with holes in it.
  */
 export function tweetText(opts: {
   format: Format;
@@ -76,17 +77,27 @@ export function tweetText(opts: {
     return v ? `${emoji} ${label} - ${v}` : null;
   };
 
+  const opening =
+    opts.format === "card"
+      ? [
+          "😋Embracing the vibe of Hacker House @2026 🎶",
+          detail("😎", "My name", opts.name),
+          detail("👤", "My Role", opts.stack),
+          detail("🥷", "My alias/builder title", opts.title),
+        ]
+      : [
+          "😋 New PFP, same Hacker House @2026 energy 🎶",
+          "🌴 Framed for Goa. Locked in for the build-station.",
+        ];
+
   return [
-    "😋Embracing the vibe of Hacker House @2026 🎶",
-    detail("😎", "My name", opts.name),
-    detail("👤", "My Role", opts.stack),
-    detail("🥷", "My alias/builder title", opts.title),
+    ...opening,
     "",
     "😼 Embrace with me the vibe of Less noise and more signal:- ",
     "",
     opts.format === "card"
       ? "Create your own Builder Badge -> 🪪"
-      : "Create your own frame -> 🖼️",
+      : "Frame your own PFP -> 🖼️",
     opts.link,
     "",
     `${EVENT.hashtag} #HHGoa2026`,

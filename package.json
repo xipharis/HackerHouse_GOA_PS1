@@ -10,7 +10,8 @@
     "test:e2e": "node scripts/e2e.mjs",
     "fixtures": "node scripts/mkfixture.mjs",
     "test:share": "node scripts/check-share.mjs",
-    "test:upload": "node scripts/check-upload.mjs"
+    "test:upload": "node scripts/check-upload.mjs",
+    "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
