@@ -102,13 +102,19 @@ export async function loadPhoto(file: File): Promise<ImageBitmap> {
   let blob: Blob = file;
 
   if (await sniffHeic(file)) {
+    // Loaded on demand: the libheif wasm is ~2 MB and most users never need it.
+    const { heicTo } = await import("heic-to/next");
     try {
-      // Loaded on demand: the libheif wasm is ~2 MB and most users never need it.
-      const { heicTo } = await import("heic-to/next");
-      blob = await heicTo({ blob: file, type: "image/jpeg", quality: 0.94 });
+      // Decoding straight to a bitmap skips a full JPEG encode + re-decode of a
+      // 12–48 MP image, which is most of the cost on this path.
+      return await clamp(await heicTo({ blob: file, type: "bitmap" }));
     } catch {
-      // Safari decodes HEIC natively, so a failed conversion isn't fatal there.
-      blob = file;
+      try {
+        blob = await heicTo({ blob: file, type: "image/jpeg", quality: 0.94 });
+      } catch {
+        // Safari decodes HEIC natively, so a failed conversion isn't fatal there.
+        blob = file;
+      }
     }
   }
 

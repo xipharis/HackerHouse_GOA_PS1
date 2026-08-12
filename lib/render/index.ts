@@ -155,10 +155,11 @@ export function renderPfp(canvas: HTMLCanvasElement, opts: RenderOpts) {
     opts.framing ?? DEFAULT_FRAMING,
   );
 
-  // Palm silhouettes arching in from the lower corners of the circle. These sit
-  // inside the crop, so they survive X's circular mask — the Goa tell at 48px.
-  palmFrond(ctx, cx - PHOTO_R * 0.98, cy + PHOTO_R * 0.72, PHOTO_R * 0.85, -0.62, C.ink, 0.5);
-  palmFrond(ctx, cx + PHOTO_R * 0.98, cy + PHOTO_R * 0.78, PHOTO_R * 0.8, Math.PI + 0.62, C.ink, 0.42);
+  // Palm silhouettes hugging the lower rim of the circle. They sit inside the
+  // crop, so they survive X's circular mask — the Goa tell at 48px — but stay
+  // low and light enough not to cut across a face.
+  palmFrond(ctx, cx - PHOTO_R, cy + PHOTO_R * 0.9, PHOTO_R * 0.6, -0.42, C.ink, 0.38);
+  palmFrond(ctx, cx + PHOTO_R, cy + PHOTO_R * 0.95, PHOTO_R * 0.55, Math.PI + 0.42, C.ink, 0.3);
   scrim(ctx, cx - PHOTO_R, cy - PHOTO_R, PHOTO_R * 2, PHOTO_R * 2, 0.62);
 
   // Inner shading so the photo sits *under* the ring rather than beside it.
@@ -227,12 +228,13 @@ export function renderCard(
   paintNight(ctx, W, H);
 
   /* --- ambience --- */
+  // Pushed to the right edge so it never sits behind the name.
   bandedSun(
     ctx,
-    W * 0.72,
-    HEADER_H + 40,
-    200,
-    linearRamp(ctx, 0, HEADER_H - 120, 0, HEADER_H + 240, [
+    W * 0.93,
+    HEADER_H + 30,
+    210,
+    linearRamp(ctx, 0, HEADER_H - 130, 0, HEADER_H + 240, [
       [0, C.gold],
       [0.5, C.coral],
       [1, C.magenta],
@@ -240,7 +242,7 @@ export function renderCard(
     C.night,
   );
   // Knock the sun back so it reads as atmosphere, not a shape competing with type.
-  ctx.fillStyle = "rgba(8,11,36,0.72)";
+  ctx.fillStyle = "rgba(8,11,36,0.8)";
   ctx.fillRect(0, HEADER_H, W, H - HEADER_H);
 
   palmFrond(ctx, W + 30, H * 0.2, 300, Math.PI - 0.5, C.teal, 0.18);
@@ -330,15 +332,8 @@ export function renderCard(
 
   /* Name — shrinks to fit, then truncates as a last resort. */
   y += 92;
-  const nameSize = fitFontSize(
-    ctx,
-    name || "Your Name",
-    colW,
-    (s) => disp(f, 900, s),
-    76,
-    36,
-    0,
-  );
+  // Sets ctx.font to the largest size that fits; the size itself isn't needed.
+  fitFontSize(ctx, name || "Your Name", colW, (s) => disp(f, 900, s), 76, 36, 0);
   ctx.fillStyle = C.sand;
   ctx.fillText(ellipsize(ctx, name || "Your Name", colW), cxLeft, y);
 
@@ -415,20 +410,21 @@ export function renderPfpShareCard(
   const f = fonts;
 
   paintNight(ctx, W, H);
+  // Bleeds off the top-left corner, clear of the copy block below it.
   bandedSun(
     ctx,
-    W * 0.2,
-    H * 0.1,
-    170,
-    linearRamp(ctx, 0, -80, 0, 240, [
+    W * 0.13,
+    -10,
+    150,
+    linearRamp(ctx, 0, -160, 0, 150, [
       [0, C.gold],
       [1, C.magenta],
     ]),
     C.night,
   );
-  ctx.fillStyle = "rgba(8,11,36,0.6)";
+  ctx.fillStyle = "rgba(8,11,36,0.55)";
   ctx.fillRect(0, 0, W, H);
-  palmFrond(ctx, -20, H * 0.3, 320, 0.4, C.teal, 0.16);
+  palmFrond(ctx, -30, H * 0.72, 300, -0.25, C.teal, 0.14);
   waveLines(ctx, 40, H - 90, 360, 4, C.teal, 0.35);
 
   // The avatar, shown exactly as X will mask it.

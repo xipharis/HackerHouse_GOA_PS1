@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { canvasFonts, ensureFontsReady } from "./fonts";
 import { EVENT, OUT, tweetText, type Format } from "@/lib/brand";
 import { ImageError, loadPhoto } from "@/lib/image";
@@ -160,13 +167,17 @@ export default function Generator() {
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
-  /** The 1200×675 image used for the link preview (and native share sheet). */
+  /**
+   * The 1200×675 image used for the link preview and the native share sheet.
+   * JPEG here rather than PNG: it's ~6× smaller over a phone connection and the
+   * artwork is all gradients, so the difference is invisible at card size.
+   */
   const buildShareImage = async (): Promise<Blob> => {
     const canvas = canvasRef.current!;
-    if (format === "card") return toBlob(canvas);
+    if (format === "card") return toBlob(canvas, "image/jpeg", 0.92);
     const sc = shareCanvasRef.current!;
     renderPfpShareCard(sc, canvas, canvasFonts);
-    return toBlob(sc);
+    return toBlob(sc, "image/jpeg", 0.92);
   };
 
   const shareToX = async () => {
@@ -179,9 +190,9 @@ export default function Generator() {
     const text = tweetText({ format, name, title });
 
     try {
-      const png = await buildShareImage();
+      const img = await buildShareImage();
       const body = new FormData();
-      body.append("image", png, "share.png");
+      body.append("image", img, "share.jpg");
       body.append("format", format);
       if (name) body.append("name", name);
       if (format === "card") body.append("title", title);
@@ -210,8 +221,10 @@ export default function Generator() {
   const shareNative = async () => {
     if (!photo) return;
     try {
-      const png = await buildShareImage();
-      const file = new File([png], filename(), { type: "image/png" });
+      const img = await buildShareImage();
+      const file = new File([img], filename().replace(/\.png$/, ".jpg"), {
+        type: "image/jpeg",
+      });
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], text: tweetText({ format, name, title }) });
       } else {
@@ -222,11 +235,13 @@ export default function Generator() {
     }
   };
 
-  // Resolved after mount: reading `navigator` during render would desync hydration.
-  const [canShareFiles, setCanShareFiles] = useState(false);
-  useEffect(() => {
-    setCanShareFiles(typeof navigator.canShare === "function");
-  }, []);
+  // Reading `navigator` during render would desync hydration, so the server
+  // snapshot is pinned to false and the real value arrives on the client.
+  const canShareFiles = useSyncExternalStore(
+    () => () => {},
+    () => typeof navigator.canShare === "function",
+    () => false,
+  );
 
   /* ------------------------------------------------------------------ UI */
 

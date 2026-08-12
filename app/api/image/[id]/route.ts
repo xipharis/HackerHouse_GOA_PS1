@@ -15,14 +15,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const png = await readLocalImage(id.replace(/\.png$/i, ""));
-  if (!png) return new Response("Not found", { status: 404 });
+  const image = await readLocalImage(id.replace(/\.(png|jpe?g)$/i, ""));
+  if (!image) return new Response("Not found", { status: 404 });
 
-  return new Response(new Uint8Array(png), {
+  return new Response(new Uint8Array(image.body), {
     headers: {
-      "Content-Type": "image/png",
+      "Content-Type": image.contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
-      "Content-Length": String(png.byteLength),
+      "Content-Length": String(image.body.byteLength),
     },
   });
 }

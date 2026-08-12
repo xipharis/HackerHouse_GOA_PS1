@@ -67,6 +67,10 @@ export default async function SharePage({ params }: Props) {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col items-center justify-center gap-6 p-6">
+      {/* Deliberately a plain <img>: the graphic is already rendered at exactly
+          the size it's displayed, so next/image would add a proxy hop and cost
+          for no gain. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={share.imageUrl}
         alt={share.name ? `${share.name} — ${EVENT.full}` : EVENT.full}

@@ -35,12 +35,16 @@ export async function POST(req: Request) {
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
-  // Trust the bytes, not the declared type: verify the PNG magic number.
-  const isPng = bytes.subarray(0, 8).equals(
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  );
-  if (!isPng) {
-    return NextResponse.json({ error: "Only PNG uploads are accepted." }, { status: 415 });
+  // Trust the bytes, not the declared type: sniff the magic number.
+  const isPng = bytes
+    .subarray(0, 8)
+    .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (!isPng && !isJpeg) {
+    return NextResponse.json(
+      { error: "Only PNG or JPEG uploads are accepted." },
+      { status: 415 },
+    );
   }
 
   const format: Format = form.get("format") === "card" ? "card" : "pfp";
@@ -48,6 +52,7 @@ export async function POST(req: Request) {
   try {
     const id = newId();
     const meta = await saveShare(id, bytes, {
+      contentType: isPng ? "image/png" : "image/jpeg",
       format,
       name: clean(form.get("name"), 60),
       title: clean(form.get("title"), 60),

@@ -16,6 +16,7 @@ export type Format = "pfp" | "card";
 export type ShareMeta = {
   id: string;
   imageUrl: string;
+  contentType: string;
   format: Format;
   name?: string;
   title?: string;
@@ -23,7 +24,8 @@ export type ShareMeta = {
 };
 
 const PREFIX = "shares";
-const useBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+/** Named to avoid the `use*` prefix, which reads as a React hook to linters. */
+const blobEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 const localDir = path.join(process.cwd(), ".data", PREFIX);
 
 export function newId(): string {
@@ -38,16 +40,17 @@ export function newId(): string {
 
 export async function saveShare(
   id: string,
-  png: Buffer,
+  data: Buffer,
   meta: Omit<ShareMeta, "id" | "imageUrl" | "createdAt">,
 ): Promise<ShareMeta> {
   const createdAt = new Date().toISOString();
+  const ext = meta.contentType === "image/png" ? "png" : "jpg";
 
-  if (useBlob()) {
+  if (blobEnabled()) {
     const { put } = await import("@vercel/blob");
-    const image = await put(`${PREFIX}/${id}/card.png`, png, {
+    const image = await put(`${PREFIX}/${id}/card.${ext}`, data, {
       access: "public",
-      contentType: "image/png",
+      contentType: meta.contentType,
       addRandomSuffix: false,
       allowOverwrite: true,
       cacheControlMaxAge: 60 * 60 * 24 * 365,
@@ -64,7 +67,7 @@ export async function saveShare(
   }
 
   await fs.mkdir(localDir, { recursive: true });
-  await fs.writeFile(path.join(localDir, `${id}.png`), png);
+  await fs.writeFile(path.join(localDir, `${id}.${ext}`), data);
   const full: ShareMeta = {
     id,
     imageUrl: `${await requestSiteUrl()}/api/image/${id}`,
@@ -80,7 +83,7 @@ export async function saveShare(
 export async function getShare(id: string): Promise<ShareMeta | null> {
   if (!/^[a-z0-9]{4,32}$/i.test(id)) return null;
 
-  if (useBlob()) {
+  if (blobEnabled()) {
     try {
       const { list } = await import("@vercel/blob");
       // addRandomSuffix is off, but the store host isn't known until we look it
@@ -106,13 +109,21 @@ export async function getShare(id: string): Promise<ShareMeta | null> {
   }
 }
 
-/** Local-only: raw PNG bytes, served by /api/image/[id] in dev. */
-export async function readLocalImage(id: string): Promise<Buffer | null> {
-  if (useBlob()) return null;
+/** Local-only: raw image bytes, served by /api/image/[id] in dev. */
+export async function readLocalImage(
+  id: string,
+): Promise<{ body: Buffer; contentType: string } | null> {
+  if (blobEnabled()) return null;
   if (!/^[a-z0-9]{4,32}$/i.test(id)) return null;
-  try {
-    return await fs.readFile(path.join(localDir, `${id}.png`));
-  } catch {
-    return null;
+  for (const [ext, contentType] of [
+    ["png", "image/png"],
+    ["jpg", "image/jpeg"],
+  ] as const) {
+    try {
+      return { body: await fs.readFile(path.join(localDir, `${id}.${ext}`)), contentType };
+    } catch {
+      /* try the next extension */
+    }
   }
+  return null;
 }

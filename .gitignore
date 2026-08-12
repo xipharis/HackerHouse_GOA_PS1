@@ -44,3 +44,6 @@ next-env.d.ts
 .fixtures/
 .data/
 .playwright-mcp/
+.e2e-out/
+.env*.local
+.env

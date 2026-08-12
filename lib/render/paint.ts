@@ -270,7 +270,8 @@ export function palmFrond(
   ctx.beginPath();
   for (let t = 0; t <= 1.001; t += 0.05) {
     const p = spine(t);
-    t === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    if (t === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
   }
   ctx.stroke();
 
@@ -326,7 +327,8 @@ export function waveLines(
     ctx.beginPath();
     for (let px = 0; px <= w; px += 6) {
       const py = rowY + Math.sin(px / 34 + r * 0.8) * (3 + r * 0.6);
-      px === 0 ? ctx.moveTo(x + px, py) : ctx.lineTo(x + px, py);
+      if (px === 0) ctx.moveTo(x + px, py);
+      else ctx.lineTo(x + px, py);
     }
     ctx.stroke();
   }
