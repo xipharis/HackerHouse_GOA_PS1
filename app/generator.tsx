@@ -56,6 +56,7 @@ export default function Generator({ format }: { format: Format }) {
   const copy = COPY[format];
 
   const [photo, setPhoto] = useState<ImageBitmap | null>(null);
+  const [photoId, setPhotoId] = useState(0);
   const [status, setStatus] = useState<Status>({ k: "idle" });
   const [framing, setFraming] = useState<Framing>({ fx: 0.5, fy: 0.5, zoom: 1 });
 
@@ -116,6 +117,7 @@ export default function Generator({ format }: { format: Format }) {
         return bmp;
       });
       setFraming({ fx: 0.5, fy: 0.5, zoom: 1 });
+      setPhotoId((n) => n + 1);
       setStatus({ k: "ready" });
     } catch (e) {
       setStatus({
@@ -170,6 +172,14 @@ export default function Generator({ format }: { format: Format }) {
     drag.current = null;
   };
 
+  // Reading `navigator` during render would desync hydration, so the server
+  // snapshot is pinned to false and the real value arrives on the client.
+  const canShareFiles = useSyncExternalStore(
+    noopSubscribe,
+    () => typeof navigator.canShare === "function",
+    () => false,
+  );
+
   /* -------------------------------------------------------------- outputs */
 
   const filename = () => {
@@ -197,41 +207,113 @@ export default function Generator({ format }: { format: Format }) {
   };
 
   /**
-   * The 1200×675 image used for the link preview and the native share sheet.
+   * The 1200×675 image posted to X and used for the link preview.
    * JPEG rather than PNG: ~6× smaller over a phone connection, and the artwork
    * is all flat fills, so the difference is invisible at card size.
    */
-  const buildShareImage = async (): Promise<Blob> => {
+  const buildShareImage = useCallback(async (): Promise<Blob> => {
     const canvas = canvasRef.current!;
     if (format === "card") return toBlob(canvas, "image/jpeg", 0.92);
     const sc = shareCanvasRef.current!;
     renderPfpShareCard(sc, canvas, canvasFonts);
     return toBlob(sc, "image/jpeg", 0.92);
+  }, [format]);
+
+  /**
+   * Identity of the artwork currently on the canvas. Used to tell whether the
+   * pre-built share image is still current.
+   */
+  const shareKey = useMemo(
+    () => JSON.stringify([format, photoId, name, stack, from, title, seed, framing]),
+    [format, photoId, name, stack, from, title, seed, framing],
+  );
+
+  /**
+   * Pre-render the share image once the artwork settles.
+   *
+   * Safari only honours navigator.share() while the click's transient
+   * activation is alive, and awaiting a canvas encode is enough to lose it. So
+   * the blob has to be ready *before* the user clicks, not after.
+   */
+  const prebuilt = useRef<{ key: string; blob: Blob } | null>(null);
+  useEffect(() => {
+    if (!photo || !fontsReady) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      buildShareImage()
+        .then((blob) => {
+          if (!cancelled) prebuilt.current = { key: shareKey, blob };
+        })
+        .catch(() => undefined);
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [shareKey, photo, fontsReady, buildShareImage]);
+
+  const caption = (link: string) =>
+    tweetText({ format, name, stack, title: format === "card" ? title : undefined, link });
+
+  /** Uploads the graphic and returns the /s/<id> permalink that unfurls to it. */
+  const uploadShare = async (img: Blob) => {
+    const body = new FormData();
+    body.append("image", img, "share.jpg");
+    body.append("format", format);
+    if (name) body.append("name", name);
+    if (format === "card") body.append("title", title);
+
+    const res = await fetch("/api/share", { method: "POST", body });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+    const { shareUrl: url } = (await res.json()) as { shareUrl: string };
+    setShareUrl(url);
+    return url;
   };
 
+  /**
+   * Share to X, attaching the real image wherever the platform permits it.
+   *
+   * X's web intent cannot carry an image — that is a limitation of the intent
+   * itself. The Web Share API can, so we prefer it: on iOS/Android (and Safari
+   * on macOS) picking X from the sheet opens a compose window with the graphic
+   * genuinely attached. Everywhere else we fall back to the intent plus a link
+   * whose OG image is the graphic, so it still renders in the timeline.
+   */
   const shareToX = async () => {
     if (!photo || sharing) return;
-    setSharing(true);
     setNote(null);
 
+    /* --- preferred: a real image attachment via the native sheet --- */
+    const ready = prebuilt.current?.key === shareKey ? prebuilt.current.blob : null;
+    if (canShareFiles && ready) {
+      const file = new File([ready], filename().replace(/\.png$/, ".jpg"), {
+        type: "image/jpeg",
+      });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            // The site itself, so the "create your own" link needs no upload and
+            // the sheet opens inside the click's activation window.
+            text: caption(`${window.location.origin}/${format === "card" ? "pass" : "pfp"}`),
+          });
+          return;
+        } catch (e) {
+          // A dismissed sheet is not a failure; anything else falls through.
+          if (e instanceof Error && e.name === "AbortError") return;
+        }
+      }
+    }
+
+    /* --- fallback: intent + a link that unfurls to the graphic --- */
+    setSharing(true);
     // Opened synchronously so Safari doesn't treat it as a blocked popup.
     const win = window.open("about:blank", "_blank");
-    const text = tweetText({ format, name, title });
-
     try {
-      const img = await buildShareImage();
-      const body = new FormData();
-      body.append("image", img, "share.jpg");
-      body.append("format", format);
-      if (name) body.append("name", name);
-      if (format === "card") body.append("title", title);
-
-      const res = await fetch("/api/share", { method: "POST", body });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
-      const { shareUrl: url } = (await res.json()) as { shareUrl: string };
-      setShareUrl(url);
-
-      const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+      const url = await uploadShare(ready ?? (await buildShareImage()));
+      // The link goes inside the body, not the intent's `url` parameter, which
+      // X would append after the hashtags and break the layout.
+      const intent = `https://x.com/intent/post?text=${encodeURIComponent(caption(url))}`;
       if (win) win.location.href = intent;
       else window.location.href = intent;
     } catch (e) {
@@ -246,34 +328,27 @@ export default function Generator({ format }: { format: Format }) {
     }
   };
 
-  /** Mobile path: hands the actual image to the X app's compose sheet. */
-  const shareNative = async () => {
+  /** Desktop escape hatch: caption on the clipboard, image already downloaded. */
+  const copyCaption = async () => {
     if (!photo) return;
     try {
-      const img = await buildShareImage();
-      const file = new File([img], filename().replace(/\.png$/, ".jpg"), {
-        type: "image/jpeg",
-      });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          text: tweetText({ format, name, title }),
-        });
-      } else {
-        setNote("Your browser can't attach images directly — use Share to X.");
+      let link = shareUrl;
+      if (!link) {
+        setSharing(true);
+        link = await uploadShare(
+          prebuilt.current?.key === shareKey
+            ? prebuilt.current.blob
+            : await buildShareImage(),
+        );
       }
+      await navigator.clipboard.writeText(caption(link));
+      setNote("Caption copied. Download the image and attach it in X.");
     } catch {
-      /* user dismissed the sheet */
+      setNote("Couldn't copy the caption — select it from the link below.");
+    } finally {
+      setSharing(false);
     }
   };
-
-  // Reading `navigator` during render would desync hydration, so the server
-  // snapshot is pinned to false and the real value arrives on the client.
-  const canShareFiles = useSyncExternalStore(
-    noopSubscribe,
-    () => typeof navigator.canShare === "function",
-    () => false,
-  );
 
   /* ------------------------------------------------------------------- UI */
 
@@ -450,15 +525,19 @@ export default function Generator({ format }: { format: Format }) {
               {sharing ? "PREPARING…" : "SHARE TO X"}
             </button>
 
-            {canShareFiles && (
-              <button
-                disabled={!photo}
-                onClick={shareNative}
-                className="rounded-xl border border-cream/15 px-4 py-2.5 text-[11px] font-bold tracking-wide text-cream/70 transition-colors hover:border-cream/30 disabled:opacity-25"
-              >
-                SHARE IMAGE DIRECTLY…
-              </button>
-            )}
+            <button
+              disabled={!photo || sharing}
+              onClick={copyCaption}
+              className="rounded-xl border border-cream/15 px-4 py-2.5 text-[11px] font-bold tracking-wide text-cream/70 transition-colors hover:border-cream/30 disabled:opacity-25"
+            >
+              COPY CAPTION
+            </button>
+
+            <p className="text-[10px] leading-relaxed text-cream/30">
+              {canShareFiles
+                ? "SHARE TO X ATTACHES THE IMAGE VIA YOUR SHARE SHEET."
+                : "X CAN'T ATTACH FILES FROM A LINK — THE POST SHOWS YOUR GRAPHIC AS ITS PREVIEW CARD. FOR A TRUE ATTACHMENT, DOWNLOAD THE PNG AND DRAG IT IN."}
+            </p>
           </div>
 
           {shareUrl && (

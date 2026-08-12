@@ -175,7 +175,7 @@ async function run() {
     route.fulfill({ contentType: "text/html", body: "<h1>stub</h1>" });
   });
 
-  async function shareFlow(label) {
+  async function shareFlow(label, extraChecks) {
     console.log(`\n[share: ${label}]`);
     const seen = intents.length;
     const popupPromise = page.waitForEvent("popup", { timeout: 25000 });
@@ -191,18 +191,25 @@ async function run() {
         ? ok("opens the X compose intent")
         : bad(`unexpected intent path: ${u.pathname}`);
 
-      shareUrl = u.searchParams.get("url");
       const text = u.searchParams.get("text") ?? "";
-      /#FrameInGoa/i.test(text)
+      // The link now lives inside the body so the hashtags stay last; X would
+      // append an intent `url` parameter after them.
+      shareUrl = (text.match(/https?:\/\/\S+\/s\/[a-z0-9]+/i) ?? [])[0] ?? null;
+
+      /#FrameInGoa/.test(text)
         ? ok("caption carries #FrameInGoa")
-        : bad(`hashtag missing from caption: ${text}`);
-      /@247pmstudio/i.test(text)
-        ? ok("caption tags @247pmstudio")
-        : bad(`host handle missing from caption: ${text}`);
-      text.length > 20
-        ? ok(`caption pre-filled: ${JSON.stringify(text.slice(0, 52))}…`)
-        : bad("caption empty");
-      shareUrl ? ok(`share link: ${shareUrl}`) : bad("no share url in intent");
+        : bad(`#FrameInGoa missing: ${text}`);
+      /#HHGoa2026/.test(text)
+        ? ok("caption carries #HHGoa2026")
+        : bad(`#HHGoa2026 missing: ${text}`);
+      /Embracing the vibe of Hacker House/.test(text)
+        ? ok("caption uses the supplied template")
+        : bad(`template opening line missing: ${text.slice(0, 60)}`);
+      text.trimEnd().endsWith("#FrameInGoa #HHGoa2026")
+        ? ok("hashtags land last")
+        : bad(`caption does not end with the hashtags: ${JSON.stringify(text.slice(-40))}`);
+      shareUrl ? ok(`share link in body: ${shareUrl}`) : bad("no share link in caption");
+      extraChecks?.(text);
       await popup.close();
     } catch (e) {
       bad(`share to X failed (${label}): ${e.message}`);
@@ -250,7 +257,17 @@ async function run() {
     await og.close();
   }
 
-  await shareFlow("card");
+  await shareFlow("card", (text) => {
+    /😎 My name - Bartholomew/.test(text)
+      ? ok("caption includes the name line")
+      : bad("name line missing from caption");
+    /👤 My Role - Rust/.test(text)
+      ? ok("caption includes the role line")
+      : bad("role line missing from caption");
+    /🥷 My alias\/builder title - /.test(text)
+      ? ok("caption includes the builder title line")
+      : bad("builder title line missing from caption");
+  });
 
   // Format A: the share image is a purpose-built 16:9 composition, not the pfp.
   await page.goto(BASE + "/pfp", { waitUntil: "networkidle" });

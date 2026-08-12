@@ -53,32 +53,44 @@ export const OUT = {
 
 export type Format = "pfp" | "card";
 
-/** Pre-filled tweet copy. Tags the host studio and carries the hashtag. */
+/**
+ * Pre-filled post copy.
+ *
+ * The link is embedded in the body rather than passed as the intent's `url`
+ * parameter, because X appends that parameter at the end and would break the
+ * ordering — the hashtags have to land last. X still unfurls a URL found in the
+ * body, so the link preview works either way.
+ *
+ * Detail lines are dropped when their field is blank, which is what makes the
+ * same template usable for the PFP flow (no name/role/title collected).
+ */
 export function tweetText(opts: {
   format: Format;
   name?: string;
+  stack?: string;
   title?: string;
+  link: string;
 }) {
-  const who = opts.name?.trim();
-
-  if (opts.format === "card") {
-    return [
-      `${who ? `${who} is` : "I'm"} packing for ${EVENT.full} 🌴`,
-      opts.title ? `Builder pass says: ${opts.title}.` : "",
-      `${EVENT.arrival} → ${EVENT.departure} · ${EVENT.place}`,
-      "",
-      `Less noise, more signal. See you on the sand, ${EVENT.hostHandle}`,
-      EVENT.hashtag,
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
+  const detail = (emoji: string, label: string, value?: string) => {
+    const v = value?.trim();
+    return v ? `${emoji} ${label} - ${v}` : null;
+  };
 
   return [
-    `New pfp, same shipping energy — ${EVENT.full} 🌴`,
-    "Less noise. More signal.",
+    "😋Embracing the vibe of Hacker House @2026 🎶",
+    detail("😎", "My name", opts.name),
+    detail("👤", "My Role", opts.stack),
+    detail("🥷", "My alias/builder title", opts.title),
     "",
-    `Framed for the build-station by ${EVENT.hostHandle}`,
-    EVENT.hashtag,
-  ].join("\n");
+    "😼 Embrace with me the vibe of Less noise and more signal:- ",
+    "",
+    opts.format === "card"
+      ? "Create your own Builder Badge -> 🪪"
+      : "Create your own frame -> 🖼️",
+    opts.link,
+    "",
+    `${EVENT.hashtag} #HHGoa2026`,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 }
