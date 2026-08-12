@@ -65,7 +65,7 @@ async function run() {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 
-  await page.goto(BASE, { waitUntil: "networkidle" });
+  await page.goto(BASE + "/pfp", { waitUntil: "networkidle" });
 
   for (const [fixture, label] of [
     ["person.jpg", "portrait-subject-1080x1620"],
@@ -120,12 +120,16 @@ async function run() {
   }
 
   /* ---------------------------------------------------------- Format B */
-  console.log("\n[format B: builder id]");
-  await page.getByRole("button", { name: /Builder ID/ }).click();
-  await page.getByRole("textbox").first().fill("Aparna Krishnamurthy");
+  console.log("\n[format B: builder pass]");
+  await page.goto(BASE + "/pass", { waitUntil: "networkidle" });
+  await page.setInputFiles('input[type="file"]', path.join(FIX, "person.jpg"));
+  await page.waitForFunction(() => document.querySelector("canvas")?.width === 1200, {
+    timeout: 20000,
+  });
+  await page.getByRole("textbox").nth(0).fill("Aparna Krishnamurthy");
   await page.getByRole("textbox").nth(1).fill("Rust · distributed systems");
-  await page.waitForFunction(() => document.querySelector("canvas")?.width === 1200);
-  await page.waitForTimeout(150);
+  await page.getByRole("textbox").nth(2).fill("Bengaluru, IN");
+  await page.waitForTimeout(250);
 
   const cardDims = await page.evaluate(() => {
     const c = document.querySelector("canvas");
@@ -135,7 +139,7 @@ async function run() {
     ? ok("card rendered 1200×675")
     : bad(`card wrong size ${cardDims.w}×${cardDims.h}`);
 
-  const title = await page.getByRole("textbox").nth(2).inputValue();
+  const title = await page.getByRole("textbox").nth(3).inputValue();
   /rust|borrow|zero-cost|memory-safe/i.test(title)
     ? ok(`stack-aware builder title: "${title}"`)
     : bad(`title ignored the stack: "${title}"`);
@@ -143,7 +147,7 @@ async function run() {
   await saveCanvas(page, "canvas", "card-filled.png");
 
   // A very long name must shrink/ellipsize rather than overflow.
-  await page.getByRole("textbox").first().fill("Bartholomew Vanderbilt-Fitzgerald III");
+  await page.getByRole("textbox").nth(0).fill("Bartholomew Vanderbilt-Fitzgerald III");
   await page.waitForTimeout(150);
   await saveCanvas(page, "canvas", "card-longname.png");
   ok("long-name variant captured");
@@ -192,6 +196,9 @@ async function run() {
       /#FrameInGoa/i.test(text)
         ? ok("caption carries #FrameInGoa")
         : bad(`hashtag missing from caption: ${text}`);
+      /@247pmstudio/i.test(text)
+        ? ok("caption tags @247pmstudio")
+        : bad(`host handle missing from caption: ${text}`);
       text.length > 20
         ? ok(`caption pre-filled: ${JSON.stringify(text.slice(0, 52))}…`)
         : bad("caption empty");
@@ -246,8 +253,11 @@ async function run() {
   await shareFlow("card");
 
   // Format A: the share image is a purpose-built 16:9 composition, not the pfp.
-  await page.getByRole("button", { name: /PFP Frame/ }).click();
-  await page.waitForFunction(() => document.querySelector("canvas")?.width === 1024);
+  await page.goto(BASE + "/pfp", { waitUntil: "networkidle" });
+  await page.setInputFiles('input[type="file"]', path.join(FIX, "person.jpg"));
+  await page.waitForFunction(() => document.querySelector("canvas")?.width === 1024, {
+    timeout: 20000,
+  });
   await page.waitForTimeout(200);
   await saveCanvas(page, "canvas", "pfp-final.png");
   await shareFlow("pfp");
@@ -260,7 +270,7 @@ async function run() {
   const mctx = await browser.newContext({ ...devices["iPhone 15"] });
   const mpage = await mctx.newPage();
   mpage.on("pageerror", (e) => errors.push("mobile: " + String(e)));
-  await mpage.goto(BASE, { waitUntil: "networkidle" });
+  await mpage.goto(BASE + "/pfp", { waitUntil: "networkidle" });
   await mpage.setInputFiles('input[type="file"]', path.join(FIX, "iphone.heic"));
   await mpage.waitForFunction(() => document.querySelector("canvas")?.width === 1024, { timeout: 15000 });
   ok("HEIC renders on mobile viewport");

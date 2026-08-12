@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -34,14 +35,33 @@ const ACCEPT = "image/*,.heic,.heif";
 /** Hoisted: an inline subscribe would re-subscribe on every single render. */
 const noopSubscribe = () => () => {};
 
-export default function Generator() {
-  const [format, setFormat] = useState<Format>("pfp");
+const COPY = {
+  pfp: {
+    kicker: "FORMAT A",
+    title: "Create the PFP",
+    blurb:
+      "Drop a photo. The frame wraps it in HH Goa yellow and keeps your face front and centre — check the circles to see exactly what X will show.",
+    other: { href: "/pass", label: "Need a builder pass instead?" },
+  },
+  card: {
+    kicker: "FORMAT B",
+    title: "Generate a builder pass",
+    blurb:
+      "Your photo, your name, your stack — plus a builder title you don't get to choose and the dates you land in Goa.",
+    other: { href: "/pfp", label: "Just want the profile picture?" },
+  },
+} as const;
+
+export default function Generator({ format }: { format: Format }) {
+  const copy = COPY[format];
+
   const [photo, setPhoto] = useState<ImageBitmap | null>(null);
   const [status, setStatus] = useState<Status>({ k: "idle" });
   const [framing, setFraming] = useState<Framing>({ fx: 0.5, fy: 0.5, zoom: 1 });
 
   const [name, setName] = useState("");
   const [stack, setStack] = useState("");
+  const [from, setFrom] = useState("");
   const [seed, setSeed] = useState(0);
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
 
@@ -71,10 +91,10 @@ export default function Generator() {
         photo,
         fonts: canvasFonts,
         framing,
-        fields: { name, stack, title, seed },
+        fields: { name, stack, from, title, seed },
       });
     }
-  }, [photo, format, framing, name, stack, title, seed]);
+  }, [photo, format, framing, name, stack, from, title, seed]);
 
   // Every input change repaints synchronously — no debounce needed, a full
   // 1200×675 composite is a couple of milliseconds.
@@ -100,7 +120,10 @@ export default function Generator() {
     } catch (e) {
       setStatus({
         k: "error",
-        msg: e instanceof ImageError ? e.message : "Something went wrong reading that file.",
+        msg:
+          e instanceof ImageError
+            ? e.message
+            : "Something went wrong reading that file.",
       });
     }
   }, []);
@@ -110,7 +133,7 @@ export default function Generator() {
     void accept(e.dataTransfer.files?.[0]);
   };
 
-  /* ------------------------------------------------- drag to reposition */
+  /* --------------------------------------------------- drag to reposition */
 
   const drag = useRef<{ x: number; y: number; fx: number; fy: number } | null>(null);
 
@@ -119,10 +142,7 @@ export default function Generator() {
     const win = photoWindow(format);
     const scale =
       Math.max(win.w / photo.width, win.h / photo.height) * Math.max(framing.zoom, 1);
-    return {
-      x: photo.width * scale - win.w,
-      y: photo.height * scale - win.h,
-    };
+    return { x: photo.width * scale - win.w, y: photo.height * scale - win.h };
   }, [photo, format, framing.zoom]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -150,11 +170,16 @@ export default function Generator() {
     drag.current = null;
   };
 
-  /* ------------------------------------------------------------- outputs */
+  /* -------------------------------------------------------------- outputs */
 
   const filename = () => {
-    const slug = (name || "builder").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    return format === "pfp" ? "hh-goa-2026-pfp.png" : `hh-goa-2026-id-${slug || "builder"}.png`;
+    const slug = (name || "builder")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    return format === "pfp"
+      ? "hh-goa-2026-pfp.png"
+      : `hh-goa-2026-pass-${slug || "builder"}.png`;
   };
 
   const download = async () => {
@@ -173,8 +198,8 @@ export default function Generator() {
 
   /**
    * The 1200×675 image used for the link preview and the native share sheet.
-   * JPEG here rather than PNG: it's ~6× smaller over a phone connection and the
-   * artwork is all gradients, so the difference is invisible at card size.
+   * JPEG rather than PNG: ~6× smaller over a phone connection, and the artwork
+   * is all flat fills, so the difference is invisible at card size.
    */
   const buildShareImage = async (): Promise<Blob> => {
     const canvas = canvasRef.current!;
@@ -221,7 +246,7 @@ export default function Generator() {
     }
   };
 
-  /** Mobile path: hands the actual PNG to the X app's compose sheet. */
+  /** Mobile path: hands the actual image to the X app's compose sheet. */
   const shareNative = async () => {
     if (!photo) return;
     try {
@@ -230,7 +255,10 @@ export default function Generator() {
         type: "image/jpeg",
       });
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], text: tweetText({ format, name, title }) });
+        await navigator.share({
+          files: [file],
+          text: tweetText({ format, name, title }),
+        });
       } else {
         setNote("Your browser can't attach images directly — use Share to X.");
       }
@@ -247,52 +275,31 @@ export default function Generator() {
     () => false,
   );
 
-  /* ------------------------------------------------------------------ UI */
+  /* ------------------------------------------------------------------- UI */
 
   const ratio = format === "pfp" ? 1 : OUT.cardW / OUT.cardH;
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
-      <header className="mb-8">
-        <p className="font-mono text-xs tracking-[0.3em] text-teal">
-          {EVENT.hashtag.toUpperCase()}
-        </p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-5xl">
-          {EVENT.full} Frame Generator
+    <main className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-4 sm:px-8">
+      <div className="mb-8 sm:mb-12">
+        <span className="text-[10px] tracking-[0.24em] text-signal/80">
+          {copy.kicker}
+        </span>
+        <h1 className="font-display mt-2 text-4xl text-cream sm:text-6xl">
+          {copy.title}
         </h1>
-        <p className="mt-2 max-w-xl text-sand/60">
-          Drop a photo. Get an on-brand profile picture or builder ID. Download it,
-          post it. No login, no waiting.
+        <p className="mt-4 max-w-lg text-xs leading-relaxed text-cream/55 sm:text-sm">
+          {copy.blurb}
         </p>
-      </header>
-
-      {/* Format switch */}
-      <div className="mb-6 inline-flex rounded-full border border-white/10 bg-white/5 p-1">
-        {(
-          [
-            ["pfp", "A · PFP Frame"],
-            ["card", "B · Builder ID"],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setFormat(k)}
-            className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-              format === k ? "bg-sand text-ink" : "text-sand/60 hover:text-sand"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
-        {/* ---------------------------------------------------- preview */}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        {/* ------------------------------------------------------- preview */}
         <section>
           <div
             onDrop={onDrop}
             onDragOver={(e) => e.preventDefault()}
-            className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
+            className="relative overflow-hidden rounded-2xl border border-cream/12 bg-forest/20"
             style={{ aspectRatio: ratio }}
           >
             <canvas
@@ -307,57 +314,67 @@ export default function Generator() {
             />
 
             {!photo && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
-                <span className="rounded-full bg-gradient-to-r from-teal via-magenta to-amber px-6 py-3 font-bold text-ink">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
+                <span className="rounded-full bg-signal px-6 py-3 text-sm font-bold text-forest">
                   {status.k === "reading" ? "Reading photo…" : "Upload a photo"}
                 </span>
-                <span className="text-sm text-sand/50">
-                  or drop it here · JPG, PNG, WebP, HEIC
+                <span className="text-[11px] tracking-[0.14em] text-cream/40">
+                  OR DROP IT HERE · JPG · PNG · WEBP · HEIC
                 </span>
                 <FileInput onPick={accept} label="Upload a photo" />
               </div>
             )}
 
             {status.k === "reading" && photo && (
-              <div className="absolute inset-0 grid place-items-center bg-ink/60 text-sm">
-                Reading photo…
+              <div className="absolute inset-0 grid place-items-center bg-ink/70 text-xs tracking-[0.2em]">
+                READING PHOTO…
               </div>
             )}
           </div>
 
           {photo && (
-            <p className="mt-2 text-center text-xs text-sand/40">
-              Drag the photo to reposition
+            <p className="mt-3 text-center text-[10px] tracking-[0.16em] text-cream/35">
+              DRAG THE PHOTO TO REPOSITION
             </p>
           )}
 
           {status.k === "error" && (
-            <p className="mt-3 rounded-lg border border-coral/40 bg-coral/10 px-3 py-2 text-sm text-coral">
+            <p className="mt-4 rounded-xl border border-signal/40 bg-signal/10 px-4 py-3 text-xs text-signal">
               {status.msg}
             </p>
           )}
 
           {/* How X will actually crop it */}
           {photo && format === "pfp" && (
-            <div className="mt-4 flex items-center gap-4">
-              <span className="font-mono text-xs text-sand/40">AS X SHOWS IT</span>
+            <div className="mt-6 flex items-center gap-5 rounded-xl border border-cream/10 bg-forest/15 px-5 py-4">
+              <span className="text-[10px] leading-tight tracking-[0.16em] text-cream/40">
+                AS X<br />SHOWS IT
+              </span>
               {[96, 48].map((s) => (
-                <CirclePreview key={s} size={s} source={canvasRef} tick={`${framing.fx},${framing.fy},${framing.zoom}`} />
+                <CirclePreview
+                  key={s}
+                  size={s}
+                  source={canvasRef}
+                  tick={`${framing.fx},${framing.fy},${framing.zoom}`}
+                />
               ))}
             </div>
           )}
         </section>
 
-        {/* ----------------------------------------------------- controls */}
+        {/* ------------------------------------------------------ controls */}
         <aside className="flex flex-col gap-4">
-          <div className="relative rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center text-sm font-bold hover:bg-white/10 focus-within:border-teal">
-            {photo ? "Change photo" : "Choose photo"}
-            <FileInput onPick={accept} label={photo ? "Change photo" : "Choose photo"} />
+          <div className="relative rounded-xl border border-cream/15 bg-forest/25 px-4 py-3 text-center text-xs font-bold tracking-wide transition-colors hover:bg-forest/40 focus-within:border-signal">
+            {photo ? "CHANGE PHOTO" : "CHOOSE PHOTO"}
+            <FileInput
+              onPick={accept}
+              label={photo ? "Change photo" : "Choose photo"}
+            />
           </div>
 
           {photo && (
-            <label className="text-xs text-sand/50">
-              Zoom
+            <label className="block">
+              <span className="text-[10px] tracking-[0.2em] text-cream/45">ZOOM</span>
               <input
                 type="range"
                 min={1}
@@ -367,19 +384,30 @@ export default function Generator() {
                 onChange={(e) =>
                   setFraming((f) => ({ ...f, zoom: Number(e.target.value) }))
                 }
-                className="mt-1 w-full"
+                className="mt-2 w-full"
               />
             </label>
           )}
 
           {format === "card" && (
             <>
-              <Field label="Name" value={name} onChange={setName} placeholder="Ada Lovelace" maxLength={40} />
-              <Field label="Stack / role" value={stack} onChange={setStack} placeholder="Rust · systems" maxLength={40} />
+              <Field label="Name" value={name} onChange={setName} placeholder="Ada Lovelace" />
+              <Field
+                label="Stack / role"
+                value={stack}
+                onChange={setStack}
+                placeholder="Rust · distributed systems"
+              />
+              <Field
+                label="Travelling from"
+                value={from}
+                onChange={setFrom}
+                placeholder="Bengaluru, IN"
+              />
 
               <div>
                 <div className="flex items-baseline justify-between">
-                  <span className="font-mono text-xs tracking-widest text-sand/50">
+                  <span className="text-[10px] tracking-[0.2em] text-cream/45">
                     BUILDER TITLE
                   </span>
                   <button
@@ -387,44 +415,48 @@ export default function Generator() {
                       setTitleOverride(null);
                       setSeed((s) => s + 1);
                     }}
-                    className="text-xs font-bold text-teal hover:underline"
+                    className="text-[10px] font-bold tracking-wide text-signal hover:underline"
                   >
-                    re-roll ↻
+                    RE-ROLL ↻
                   </button>
                 </div>
                 <input
                   value={title}
                   onChange={(e) => setTitleOverride(e.target.value.slice(0, 40))}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-teal"
+                  className="mt-2 w-full rounded-xl border border-cream/15 bg-forest/25 px-3 py-2.5 text-xs text-cream outline-none transition-colors placeholder:text-cream/25 focus:border-signal"
                 />
               </div>
+
+              <p className="text-[10px] leading-relaxed tracking-wide text-cream/30">
+                PASS SHOWS {EVENT.arrival} → {EVENT.departure}
+              </p>
             </>
           )}
 
-          <div className="mt-2 flex flex-col gap-2">
+          <div className="mt-2 flex flex-col gap-2.5">
             <button
               disabled={!photo}
               onClick={download}
-              className="rounded-xl bg-sand px-4 py-3 font-black text-ink disabled:opacity-30"
+              className="rounded-xl bg-cream px-4 py-3.5 text-xs font-bold tracking-wide text-forest transition-opacity hover:opacity-90 disabled:opacity-25"
             >
-              Download PNG
+              DOWNLOAD PNG
             </button>
 
             <button
               disabled={!photo || sharing}
               onClick={shareToX}
-              className="rounded-xl bg-gradient-to-r from-teal via-magenta to-amber px-4 py-3 font-black text-ink disabled:opacity-30"
+              className="rounded-xl bg-signal px-4 py-3.5 text-xs font-bold tracking-wide text-forest transition-opacity hover:opacity-90 disabled:opacity-25"
             >
-              {sharing ? "Preparing…" : "Share to X"}
+              {sharing ? "PREPARING…" : "SHARE TO X"}
             </button>
 
             {canShareFiles && (
               <button
                 disabled={!photo}
                 onClick={shareNative}
-                className="rounded-xl border border-white/15 px-4 py-2.5 text-sm font-bold text-sand/80 disabled:opacity-30"
+                className="rounded-xl border border-cream/15 px-4 py-2.5 text-[11px] font-bold tracking-wide text-cream/70 transition-colors hover:border-cream/30 disabled:opacity-25"
               >
-                Share image directly…
+                SHARE IMAGE DIRECTLY…
               </button>
             )}
           </div>
@@ -435,13 +467,20 @@ export default function Generator() {
                 void navigator.clipboard.writeText(shareUrl);
                 setNote("Link copied.");
               }}
-              className="truncate rounded-lg border border-white/10 px-3 py-2 text-left font-mono text-xs text-sand/50"
+              className="truncate rounded-lg border border-cream/10 px-3 py-2 text-left text-[10px] text-cream/45 hover:border-cream/25"
             >
               {shareUrl}
             </button>
           )}
 
-          {note && <p className="text-xs text-amber">{note}</p>}
+          {note && <p className="text-[11px] text-signal">{note}</p>}
+
+          <Link
+            href={copy.other.href}
+            className="mt-2 text-[11px] text-cream/40 underline-offset-4 transition-colors hover:text-signal hover:underline"
+          >
+            {copy.other.label}
+          </Link>
         </aside>
       </div>
 
@@ -489,31 +528,29 @@ function Field({
   value,
   onChange,
   placeholder,
-  maxLength,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
-  maxLength: number;
 }) {
   return (
     <label className="block">
-      <span className="font-mono text-xs tracking-widest text-sand/50">
+      <span className="text-[10px] tracking-[0.2em] text-cream/45">
         {label.toUpperCase()}
       </span>
       <input
         value={value}
         placeholder={placeholder}
-        maxLength={maxLength}
+        maxLength={40}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-teal"
+        className="mt-2 w-full rounded-xl border border-cream/15 bg-forest/25 px-3 py-2.5 text-xs text-cream outline-none transition-colors placeholder:text-cream/25 focus:border-signal"
       />
     </label>
   );
 }
 
-/** Mirrors the live canvas into a circle at true X display sizes. */
+/** Mirrors the live canvas into a circle at the sizes X actually renders. */
 function CirclePreview({
   size,
   source,
@@ -542,5 +579,7 @@ function CirclePreview({
   });
   // `tick` is only here to re-run the effect when the main canvas repaints.
   void tick;
-  return <canvas ref={ref} style={{ width: size, height: size }} className="rounded-full" />;
+  return (
+    <canvas ref={ref} style={{ width: size, height: size }} className="rounded-full" />
+  );
 }

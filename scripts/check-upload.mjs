@@ -66,12 +66,13 @@ async function pick(locator, file) {
 
 try {
   await pick(dropZone(), "person.jpg");
+  // 1024² for the pfp route, 1200×675 for the pass route — either counts.
   await page.waitForFunction(
     () => {
       const c = document.querySelector("canvas");
-      return c?.width === 1024 && !c.className.includes("invisible");
+      return !!c && c.width >= 1024 && !c.className.includes("invisible");
     },
-    { timeout: 15000 },
+    { timeout: 20000 },
   );
   check("click → pick → renders", true);
 } catch (e) {
@@ -84,7 +85,7 @@ try {
   await page.waitForTimeout(1200);
   check(
     "same file can be re-picked",
-    await page.evaluate(() => document.querySelector("canvas")?.width === 1024),
+    await page.evaluate(() => (document.querySelector("canvas")?.width ?? 0) >= 1024),
   );
 } catch (e) {
   check("same file can be re-picked", false, e.message.split("\n")[0]);

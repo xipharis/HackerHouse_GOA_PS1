@@ -3,7 +3,7 @@
  * Everything here is pure drawing — no brand decisions, no layout.
  */
 
-import { SUNSET } from "../brand";
+import { SIGNAL } from "../brand";
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -40,25 +40,10 @@ export function linearRamp(
   y0: number,
   x1: number,
   y1: number,
-  stops: readonly [number, string][] = SUNSET,
+  stops: readonly [number, string][] = SIGNAL,
 ) {
   const g = ctx.createLinearGradient(x0, y0, x1, y1);
   for (const [at, color] of stops) g.addColorStop(at, color);
-  return g;
-}
-
-/**
- * Sunset ramp swept around a circle. Falls back to a linear ramp on the rare
- * engine without createConicGradient.
- */
-export function conicRamp(ctx: Ctx, cx: number, cy: number, startAngle = -Math.PI / 2) {
-  if (typeof ctx.createConicGradient !== "function") {
-    return linearRamp(ctx, cx * 0.2, 0, cx * 1.8, cy * 2);
-  }
-  const g = ctx.createConicGradient(startAngle, cx, cy);
-  // Loop the ramp back to its first colour so the seam is invisible.
-  for (const [at, color] of SUNSET) g.addColorStop(at * 0.94, color);
-  g.addColorStop(1, SUNSET[0][1]);
   return g;
 }
 

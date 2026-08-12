@@ -4,18 +4,21 @@
  * Everything is drawn on a plain 2D canvas in the browser, so upload → finished
  * artwork is a single synchronous paint (a few milliseconds) with no server hop.
  *
- *   renderPfp   — Format A, 1024×1024 profile picture with a branded ring.
- *   renderCard  — Format B, 1200×675 builder ID badge.
+ *   renderPfp   — Format A, 1024×1024 profile picture with a signal-yellow ring.
+ *   renderCard  — Format B, 1200×675 builder pass.
  *   renderPfpShareCard — 1200×675 link-preview card wrapping a Format A pfp,
  *                        so the X card preview is never a cropped square.
+ *
+ * Colour discipline: deep green ground, one signal yellow, cream type. The
+ * yellow is the loudest thing on the canvas and is spent only on the ring, the
+ * pass header and the builder title.
  */
 
-import { C, EVENT, OUT, SUNSET } from "../brand";
+import { C, EVENT, OUT, SIGNAL } from "../brand";
 import { badgeId } from "../titles";
 import {
   arcText,
   bandedSun,
-  conicRamp,
   coverDraw,
   Ctx,
   DEFAULT_FRAMING,
@@ -36,6 +39,8 @@ export type Fonts = { display: string; mono: string };
 export type CardFields = {
   name: string;
   stack: string;
+  /** Optional origin city, printed alongside the travel dates. */
+  from?: string;
   title: string;
   seed?: number;
 };
@@ -53,16 +58,14 @@ const mono = (f: Fonts, weight: number, size: number) =>
 
 /* -------------------------------------------------------------- geometry */
 
-/** Format A ring metrics. */
 const RING_OUTER = OUT.pfp / 2 - 6;
-const RING_W = 60;
+const RING_W = 62;
 const RING_MID = RING_OUTER - RING_W / 2;
 const PHOTO_R = RING_OUTER - RING_W + 2;
 
-/** Format B chrome. */
-const HEADER_H = 62;
+const HEADER_H = 58;
 const PAD = 44;
-const CARD_PHOTO_W = 388;
+const CARD_PHOTO_W = 372;
 
 /**
  * The box the photo is drawn into, in output pixels. The UI needs it to convert
@@ -76,34 +79,34 @@ export function photoWindow(format: "pfp" | "card") {
 
 /* ------------------------------------------------------------- background */
 
-/** The shared night-ocean ground: deep vertical gradient + a warm horizon glow. */
-function paintNight(ctx: Ctx, w: number, h: number) {
-  const g = ctx.createLinearGradient(0, 0, w * 0.3, h);
-  g.addColorStop(0, C.deep);
-  g.addColorStop(0.55, C.night);
-  g.addColorStop(1, C.ink);
+/** The shared ground: deep green, lit from one corner. */
+function paintGround(ctx: Ctx, w: number, h: number) {
+  const g = ctx.createLinearGradient(0, 0, w * 0.4, h);
+  g.addColorStop(0, C.green);
+  g.addColorStop(0.6, C.greenDeep);
+  g.addColorStop(1, C.greenDark);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  const glow = ctx.createRadialGradient(w * 0.78, h * 0.12, 0, w * 0.78, h * 0.12, w * 0.6);
-  glow.addColorStop(0, "rgba(255,46,147,0.30)");
-  glow.addColorStop(0.5, "rgba(255,94,91,0.10)");
+  const glow = ctx.createRadialGradient(w * 0.82, h * 0.1, 0, w * 0.82, h * 0.1, w * 0.62);
+  glow.addColorStop(0, "rgba(254,225,1,0.20)");
+  glow.addColorStop(0.55, "rgba(254,225,1,0.05)");
   glow.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, w, h);
 
-  const cool = ctx.createRadialGradient(w * 0.1, h, 0, w * 0.1, h, w * 0.55);
-  cool.addColorStop(0, "rgba(0,224,198,0.16)");
-  cool.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = cool;
+  const shade = ctx.createRadialGradient(w * 0.05, h, 0, w * 0.05, h, w * 0.6);
+  shade.addColorStop(0, "rgba(3,25,13,0.55)");
+  shade.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = shade;
   ctx.fillRect(0, 0, w, h);
 }
 
-/** Darkens the bottom of a photo so overlaid type always has contrast. */
+/** Darkens the foot of a photo so overlaid type always has contrast. */
 function scrim(ctx: Ctx, x: number, y: number, w: number, h: number, from = 0.45) {
   const g = ctx.createLinearGradient(0, y + h * from, 0, y + h);
-  g.addColorStop(0, "rgba(5,6,26,0)");
-  g.addColorStop(1, "rgba(5,6,26,0.82)");
+  g.addColorStop(0, "rgba(3,25,13,0)");
+  g.addColorStop(1, "rgba(3,25,13,0.86)");
   ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
 }
@@ -121,26 +124,20 @@ export function renderPfp(canvas: HTMLCanvasElement, opts: RenderOpts) {
 
   ctx.clearRect(0, 0, S, S);
 
-  /* --- background: only visible in the square download, X crops it to a circle,
-         so this is where the "poster" branding lives. --- */
-  paintNight(ctx, S, S);
-  bandedSun(
-    ctx,
-    S * 0.94,
-    S * 0.08,
-    S * 0.2,
-    linearRamp(ctx, 0, S * -0.1, 0, S * 0.3, [
-      [0, C.gold],
-      [0.55, C.coral],
-      [1, C.magenta],
-    ]),
-    C.night,
-  );
-  waveLines(ctx, -20, S * 0.9, S * 0.45, 4, C.teal, 0.5);
-  palmFrond(ctx, -10, S * 0.14, S * 0.3, 0.35, C.teal, 0.32);
-  palmFrond(ctx, S * 0.06, S - 8, S * 0.28, -1.15, C.aqua, 0.22);
+  /* Background — X crops this to a circle, so it's the downloaded square that
+     benefits. Treated as a small poster in its own right. */
+  paintGround(ctx, S, S);
+  // Held well back: it lives outside the circular crop and must never compete
+  // with the ring, which is the one thing that has to read at avatar scale.
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  bandedSun(ctx, S * 0.95, S * 0.07, S * 0.21, C.yellow, C.green);
+  ctx.restore();
+  waveLines(ctx, -20, S * 0.9, S * 0.46, 4, C.yellow, 0.4);
+  palmFrond(ctx, -12, S * 0.15, S * 0.3, 0.35, C.yellow, 0.22);
+  palmFrond(ctx, S * 0.05, S - 6, S * 0.27, -1.15, C.lime, 0.16);
 
-  /* --- the photo, front and centre --- */
+  /* The photo, front and centre. */
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, PHOTO_R, 0, Math.PI * 2);
@@ -155,32 +152,31 @@ export function renderPfp(canvas: HTMLCanvasElement, opts: RenderOpts) {
     opts.framing ?? DEFAULT_FRAMING,
   );
 
-  // Palm silhouettes hugging the lower rim of the circle. They sit inside the
-  // crop, so they survive X's circular mask — the Goa tell at 48px — but stay
-  // low and light enough not to cut across a face.
-  palmFrond(ctx, cx - PHOTO_R, cy + PHOTO_R * 0.9, PHOTO_R * 0.6, -0.42, C.ink, 0.38);
-  palmFrond(ctx, cx + PHOTO_R, cy + PHOTO_R * 0.95, PHOTO_R * 0.55, Math.PI + 0.42, C.ink, 0.3);
-  scrim(ctx, cx - PHOTO_R, cy - PHOTO_R, PHOTO_R * 2, PHOTO_R * 2, 0.62);
+  // Palm silhouettes hugging the lower rim — inside the circular mask, so they
+  // survive X's crop, but low and light enough not to cut across a face.
+  palmFrond(ctx, cx - PHOTO_R, cy + PHOTO_R * 0.9, PHOTO_R * 0.58, -0.42, C.ink, 0.34);
+  palmFrond(ctx, cx + PHOTO_R, cy + PHOTO_R * 0.95, PHOTO_R * 0.52, Math.PI + 0.42, C.ink, 0.26);
+  scrim(ctx, cx - PHOTO_R, cy - PHOTO_R, PHOTO_R * 2, PHOTO_R * 2, 0.66);
 
-  // Inner shading so the photo sits *under* the ring rather than beside it.
-  const vig = ctx.createRadialGradient(cx, cy, PHOTO_R * 0.72, cx, cy, PHOTO_R);
+  const vig = ctx.createRadialGradient(cx, cy, PHOTO_R * 0.74, cx, cy, PHOTO_R);
   vig.addColorStop(0, "rgba(0,0,0,0)");
-  vig.addColorStop(1, "rgba(5,6,26,0.55)");
+  vig.addColorStop(1, "rgba(3,25,13,0.5)");
   ctx.fillStyle = vig;
   ctx.fillRect(cx - PHOTO_R, cy - PHOTO_R, PHOTO_R * 2, PHOTO_R * 2);
   ctx.restore();
 
-  /* --- the ring --- */
+  /* The ring. Solid signal yellow rather than a gradient: at the 48px X renders
+     an avatar at, a flat band of one loud colour is the only thing that reads. */
   ctx.save();
   ctx.lineWidth = RING_W;
-  ctx.strokeStyle = conicRamp(ctx, cx, cy, Math.PI * 0.75);
+  ctx.strokeStyle = linearRamp(ctx, cx - RING_OUTER, 0, cx + RING_OUTER, S, SIGNAL);
   ctx.beginPath();
   ctx.arc(cx, cy, RING_MID, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Hairlines top and bottom of the band keep the edge crisp after downscaling.
+  // Hairlines keep the band crisp once the avatar is scaled down.
   ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(5,6,26,0.55)";
+  ctx.strokeStyle = "rgba(3,25,13,0.5)";
   ctx.beginPath();
   ctx.arc(cx, cy, RING_OUTER, 0, Math.PI * 2);
   ctx.stroke();
@@ -189,28 +185,28 @@ export function renderPfp(canvas: HTMLCanvasElement, opts: RenderOpts) {
   ctx.stroke();
   ctx.restore();
 
-  /* --- type set into the ring --- */
+  /* Type set into the ring. Mono, not the display serif: Imbue's hairlines
+     vanish at avatar scale. */
   ctx.save();
-  ctx.fillStyle = C.ink;
-  ctx.font = disp(f, 900, 46);
-  arcText(ctx, EVENT.full, cx, cy, RING_MID + 1, Math.PI / 2, 7, true);
+  ctx.fillStyle = C.green;
+  ctx.font = mono(f, 700, 44);
+  arcText(ctx, EVENT.full, cx, cy, RING_MID + 2, Math.PI / 2, 6, true);
 
-  ctx.font = mono(f, 700, 23);
-  ctx.fillStyle = "rgba(5,6,26,0.82)";
-  arcText(ctx, `${EVENT.hashtag.toUpperCase()}`, cx, cy, RING_MID + 1, -Math.PI / 2, 6);
+  ctx.font = mono(f, 700, 22);
+  ctx.fillStyle = "rgba(11,104,57,0.9)";
+  arcText(ctx, EVENT.hashtag.toUpperCase(), cx, cy, RING_MID + 2, -Math.PI / 2, 6);
 
-  // Star separators where the two runs of text meet.
-  ctx.font = disp(f, 900, 30);
-  ctx.fillStyle = "rgba(5,6,26,0.7)";
-  arcText(ctx, "✦", cx, cy, RING_MID + 2, 0, 0);
-  arcText(ctx, "✦", cx, cy, RING_MID + 2, Math.PI, 0);
+  ctx.font = mono(f, 700, 26);
+  ctx.fillStyle = "rgba(11,104,57,0.75)";
+  arcText(ctx, "◆", cx, cy, RING_MID + 3, 0, 0);
+  arcText(ctx, "◆", cx, cy, RING_MID + 3, Math.PI, 0);
   ctx.restore();
 
-  grain(ctx, S, S, 0.05);
+  grain(ctx, S, S, 0.045);
   return canvas;
 }
 
-/* ====================================================== Format B: ID card */
+/* ==================================================== Format B: builder pass */
 
 export function renderCard(
   canvas: HTMLCanvasElement,
@@ -222,180 +218,176 @@ export function renderCard(
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
   const f = opts.fonts;
-  const { name, stack, title, seed = 0 } = opts.fields;
+  const { name, stack, from, title, seed = 0 } = opts.fields;
 
   ctx.clearRect(0, 0, W, H);
-  paintNight(ctx, W, H);
+  paintGround(ctx, W, H);
 
-  /* --- ambience --- */
-  // Pushed to the right edge so it never sits behind the name.
-  bandedSun(
-    ctx,
-    W * 0.93,
-    HEADER_H + 30,
-    210,
-    linearRamp(ctx, 0, HEADER_H - 130, 0, HEADER_H + 240, [
-      [0, C.gold],
-      [0.5, C.coral],
-      [1, C.magenta],
-    ]),
-    C.night,
-  );
-  // Knock the sun back so it reads as atmosphere, not a shape competing with type.
-  ctx.fillStyle = "rgba(8,11,36,0.8)";
+  /* Ambience, kept to the right edge so it never sits behind type. */
+  bandedSun(ctx, W * 0.94, HEADER_H + 26, 200, C.yellow, C.green);
+  ctx.fillStyle = "rgba(7,80,41,0.78)";
   ctx.fillRect(0, HEADER_H, W, H - HEADER_H);
+  palmFrond(ctx, W + 24, H * 0.22, 290, Math.PI - 0.5, C.yellow, 0.13);
+  palmFrond(ctx, W * 0.99, H + 18, 250, -Math.PI / 2 - 0.5, C.lime, 0.1);
+  waveLines(ctx, W * 0.53, H - 78, W * 0.43, 4, C.yellow, 0.22);
 
-  palmFrond(ctx, W + 30, H * 0.2, 300, Math.PI - 0.5, C.teal, 0.18);
-  palmFrond(ctx, W * 0.99, H + 20, 260, -Math.PI / 2 - 0.5, C.aqua, 0.14);
-  waveLines(ctx, W * 0.52, H - 82, W * 0.44, 4, C.teal, 0.35);
-
-  /* --- header strip: a badge's lanyard band --- */
+  /* Header band — the lanyard stripe of the pass. */
   ctx.save();
-  ctx.fillStyle = linearRamp(ctx, 0, 0, W, 0);
+  ctx.fillStyle = C.yellow;
   ctx.fillRect(0, 0, W, HEADER_H);
   ctx.beginPath();
   ctx.rect(0, 0, W, HEADER_H);
   ctx.clip();
-  ctx.fillStyle = "rgba(5,6,26,0.86)";
-  ctx.font = mono(f, 700, 22);
+  ctx.fillStyle = C.green;
+  ctx.font = mono(f, 700, 20);
   ctx.textBaseline = "middle";
-  const marquee = `${EVENT.full}  ✦  ${EVENT.tagline}  ✦  ${EVENT.hashtag.toUpperCase()}  ✦  ${EVENT.place}  ✦  `;
+  const marquee = `${EVENT.full}  ◆  ${EVENT.motto}  ◆  ${EVENT.hashtag.toUpperCase()}  ◆  ${EVENT.place}  ◆  `;
   const unit = trackedWidth(ctx, marquee, 3);
-  for (let x = -20; x < W; x += unit) tracked(ctx, marquee, x, HEADER_H / 2 + 1, 3);
+  for (let x = -24; x < W; x += unit) tracked(ctx, marquee, x, HEADER_H / 2 + 1, 3);
   ctx.restore();
 
-  /* --- photo panel --- */
+  /* Photo panel. */
   const pw = CARD_PHOTO_W;
   const px = PAD;
   const py = HEADER_H + PAD;
   const ph = H - py - PAD;
-  const pr = 26;
 
   ctx.save();
-  roundRect(ctx, px, py, pw, ph, pr);
+  roundRect(ctx, px, py, pw, ph, 22);
   ctx.save();
   ctx.clip();
   coverDraw(ctx, opts.photo, px, py, pw, ph, opts.framing ?? DEFAULT_FRAMING);
-  scrim(ctx, px, py, pw, ph, 0.68);
+  scrim(ctx, px, py, pw, ph, 0.7);
   ctx.restore();
-
-  // Gradient edge — the same ramp as the ring, so both formats read as one kit.
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = linearRamp(ctx, px, py, px + pw, py + ph);
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = C.yellow;
   ctx.stroke();
   ctx.restore();
 
-  // Badge number sitting on the photo's dark foot.
   ctx.save();
-  ctx.font = mono(f, 700, 21);
-  ctx.fillStyle = C.teal;
+  ctx.font = mono(f, 700, 19);
+  ctx.fillStyle = C.yellow;
   ctx.textBaseline = "alphabetic";
-  tracked(ctx, badgeId(name, stack, seed), px + 26, py + ph - 28, 3);
+  tracked(ctx, badgeId(name, stack, seed), px + 22, py + ph - 24, 3);
   ctx.restore();
 
-  /* --- right column --- */
-  const cxLeft = px + pw + 40;
-  const colW = W - cxLeft - PAD;
-  let y = py + 6;
+  /* Right column. */
+  const cxL = px + pw + 38;
+  const colW = W - cxL - PAD;
+  let y = py + 4;
 
   ctx.textBaseline = "alphabetic";
 
-  // Eyebrow
-  ctx.font = mono(f, 700, 20);
-  ctx.fillStyle = C.teal;
-  tracked(ctx, "BUILDER ID", cxLeft, y + 16, 6);
+  ctx.font = mono(f, 700, 19);
+  ctx.fillStyle = C.yellow;
+  tracked(ctx, "BUILDER PASS", cxL, y + 14, 5);
 
-  // Wordmark, right-aligned against the eyebrow
-  ctx.font = disp(f, 900, 40);
-  const wmW = trackedWidth(ctx, EVENT.wordmark, 2);
-  ctx.fillStyle = C.sand;
-  tracked(ctx, EVENT.wordmark, cxLeft + colW - wmW - 74, y + 20, 2);
+  ctx.font = disp(f, 800, 42);
+  ctx.fillStyle = C.cream;
+  const wm = EVENT.wordmark;
+  const wmW = trackedWidth(ctx, wm, 1);
+  tracked(ctx, wm, cxL + colW - wmW - 62, y + 20, 1);
 
-  // '26 chip
   ctx.save();
-  roundRect(ctx, cxLeft + colW - 66, y - 8, 66, 38, 10);
-  ctx.fillStyle = linearRamp(ctx, cxLeft + colW - 66, y - 8, cxLeft + colW, y + 30, [
-    [0, C.amber],
-    [1, C.coral],
-  ]);
+  roundRect(ctx, cxL + colW - 56, y - 8, 56, 36, 8);
+  ctx.fillStyle = C.yellow;
   ctx.fill();
-  ctx.font = disp(f, 900, 24);
-  ctx.fillStyle = C.ink;
+  ctx.font = mono(f, 700, 20);
+  ctx.fillStyle = C.green;
   ctx.textAlign = "center";
-  ctx.fillText("’26", cxLeft + colW - 33, y + 20);
+  ctx.fillText("’26", cxL + colW - 28, y + 18);
   ctx.textAlign = "left";
   ctx.restore();
 
-  y += 46;
-  ctx.fillStyle = "rgba(255,244,228,0.18)";
-  ctx.fillRect(cxLeft, y, colW, 2);
+  y += 40;
+  ctx.fillStyle = "rgba(255,251,232,0.22)";
+  ctx.fillRect(cxL, y, colW, 2);
 
-  /* Name — shrinks to fit, then truncates as a last resort. */
-  y += 92;
-  // Sets ctx.font to the largest size that fits; the size itself isn't needed.
-  fitFontSize(ctx, name || "Your Name", colW, (s) => disp(f, 900, s), 76, 36, 0);
-  ctx.fillStyle = C.sand;
-  ctx.fillText(ellipsize(ctx, name || "Your Name", colW), cxLeft, y);
+  /* Name — Imbue at size, shrinking to fit, ellipsised only as a last resort. */
+  y += 86;
+  fitFontSize(ctx, name || "Your Name", colW, (s) => disp(f, 800, s), 82, 38, 0);
+  ctx.fillStyle = C.cream;
+  ctx.fillText(ellipsize(ctx, name || "Your Name", colW), cxL, y);
 
-  /* Stack / role */
-  y += 46;
-  ctx.font = mono(f, 700, 25);
-  ctx.fillStyle = C.aqua;
+  /* Stack / role. Extra leading here because Imbue's descenders run deep. */
+  y += 52;
   const stackLine = (stack || "builder").toUpperCase();
-  ctx.font = mono(f, 700, stackLine.length > 34 ? 19 : 25);
-  tracked(ctx, ellipsize(ctx, stackLine, colW, 4), cxLeft, y, 4);
+  ctx.font = mono(f, 600, stackLine.length > 30 ? 18 : 23);
+  ctx.fillStyle = C.yellow;
+  tracked(ctx, ellipsize(ctx, stackLine, colW, 3), cxL, y, 3);
 
-  /* Builder title — the payoff, so it gets the loudest treatment. */
-  y += 54;
-  ctx.font = mono(f, 700, 18);
-  ctx.fillStyle = "rgba(255,244,228,0.55)";
-  tracked(ctx, "BUILDER TITLE", cxLeft, y, 5);
+  /* Builder title — the payoff, so it gets the yellow. */
+  y += 40;
+  ctx.font = mono(f, 500, 16);
+  ctx.fillStyle = "rgba(255,251,232,0.55)";
+  tracked(ctx, "BUILDER TITLE", cxL, y, 4);
 
-  y += 20;
-  const chipH = 74;
-  const titleText = title || "Sunset Shipper";
-  const titleSize = fitFontSize(
-    ctx,
-    titleText,
-    colW - 56,
-    (s) => disp(f, 900, s),
-    38,
-    20,
-    0,
-  );
-  const chipW = Math.min(colW, trackedWidth(ctx, titleText, 0) + 56);
+  y += 18;
+  const chipH = 66;
+  const titleText = title || "Low-Tide Shipper";
+  const titleSize = fitFontSize(ctx, titleText, colW - 48, (s) => disp(f, 800, s), 40, 22, 0);
+  const chipW = Math.min(colW, trackedWidth(ctx, titleText, 0) + 48);
 
   ctx.save();
-  roundRect(ctx, cxLeft, y, chipW, chipH, 16);
-  ctx.fillStyle = linearRamp(ctx, cxLeft, y, cxLeft + chipW, y + chipH, SUNSET);
+  roundRect(ctx, cxL, y, chipW, chipH, 12);
+  ctx.fillStyle = C.yellow;
   ctx.fill();
-  ctx.fillStyle = C.ink;
-  ctx.font = disp(f, 900, titleSize);
+  ctx.fillStyle = C.green;
+  ctx.font = disp(f, 800, titleSize);
   ctx.textBaseline = "middle";
-  ctx.fillText(ellipsize(ctx, titleText, chipW - 40), cxLeft + 28, y + chipH / 2 + 1);
+  ctx.fillText(ellipsize(ctx, titleText, chipW - 36), cxL + 24, y + chipH / 2 + 2);
   ctx.restore();
 
-  /* Foot */
+  /* Travel stamps — what makes it a pass rather than a badge. */
+  y += chipH + 34;
   ctx.textBaseline = "alphabetic";
-  ctx.font = mono(f, 700, 20);
-  ctx.fillStyle = C.gold;
-  tracked(ctx, EVENT.hashtag.toUpperCase(), cxLeft, H - PAD - 8, 4);
+  const third = colW / 3;
+  const stamps: [string, string][] = [
+    ["FROM", (from || "—").toUpperCase()],
+    ["ARRIVES", EVENT.arrival],
+    ["DEPARTS", EVENT.departure],
+  ];
+  stamps.forEach(([label, value], i) => {
+    const x = cxL + i * third;
+    ctx.font = mono(f, 500, 15);
+    ctx.fillStyle = "rgba(255,251,232,0.5)";
+    tracked(ctx, label, x, y, 4);
+    ctx.font = mono(f, 700, 21);
+    ctx.fillStyle = C.cream;
+    tracked(ctx, ellipsize(ctx, value, third - 14, 1), x, y + 27, 1);
+  });
 
-  ctx.font = mono(f, 400, 18);
-  ctx.fillStyle = "rgba(255,244,228,0.5)";
-  const place = EVENT.place;
-  const placeW = trackedWidth(ctx, place, 4);
-  tracked(ctx, place, cxLeft + colW - placeW, H - PAD - 8, 4);
+  // Dotted rule, like a tear-off stub.
+  ctx.save();
+  ctx.strokeStyle = "rgba(254,225,1,0.45)";
+  ctx.setLineDash([3, 7]);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cxL, y + 46);
+  ctx.lineTo(cxL + colW, y + 46);
+  ctx.stroke();
+  ctx.restore();
 
-  grain(ctx, W, H, 0.045);
+  /* Foot. */
+  ctx.font = mono(f, 700, 18);
+  ctx.fillStyle = C.yellow;
+  tracked(ctx, EVENT.hashtag.toUpperCase(), cxL, H - PAD - 6, 3);
+
+  ctx.font = mono(f, 500, 16);
+  ctx.fillStyle = "rgba(255,251,232,0.5)";
+  const foot = EVENT.place;
+  const footW = trackedWidth(ctx, foot, 3);
+  tracked(ctx, foot, cxL + colW - footW, H - PAD - 6, 3);
+
+  grain(ctx, W, H, 0.04);
   return canvas;
 }
 
 /* ============================================ Format A → link preview card */
 
 /**
- * X renders a link card at 2:1-ish. Handing it the raw 1024² pfp would centre-crop
- * the ring off, so Format A gets its own 1200×675 preview composition.
+ * X renders a link card at roughly 2:1. Handing it the raw 1024² pfp would
+ * centre-crop the ring off, so Format A gets its own 1200×675 composition.
  */
 export function renderPfpShareCard(
   canvas: HTMLCanvasElement,
@@ -409,32 +401,21 @@ export function renderPfpShareCard(
   const ctx = canvas.getContext("2d")!;
   const f = fonts;
 
-  paintNight(ctx, W, H);
-  // Bleeds off the top-left corner, clear of the copy block below it.
-  bandedSun(
-    ctx,
-    W * 0.13,
-    -10,
-    150,
-    linearRamp(ctx, 0, -160, 0, 150, [
-      [0, C.gold],
-      [1, C.magenta],
-    ]),
-    C.night,
-  );
-  ctx.fillStyle = "rgba(8,11,36,0.55)";
+  paintGround(ctx, W, H);
+  bandedSun(ctx, W * 0.12, -14, 145, C.yellow, C.green);
+  ctx.fillStyle = "rgba(7,80,41,0.62)";
   ctx.fillRect(0, 0, W, H);
-  palmFrond(ctx, -30, H * 0.72, 300, -0.25, C.teal, 0.14);
-  waveLines(ctx, 40, H - 90, 360, 4, C.teal, 0.35);
+  palmFrond(ctx, -30, H * 0.74, 290, -0.25, C.yellow, 0.12);
+  waveLines(ctx, 44, H - 86, 340, 4, C.yellow, 0.25);
 
-  // The avatar, shown exactly as X will mask it.
-  const size = 476;
-  const ax = W - size - 78;
+  // The avatar, masked exactly as X will mask it.
+  const size = 468;
+  const ax = W - size - 76;
   const ay = (H - size) / 2;
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.55)";
-  ctx.shadowBlur = 60;
-  ctx.shadowOffsetY = 18;
+  ctx.shadowColor = "rgba(3,25,13,0.55)";
+  ctx.shadowBlur = 56;
+  ctx.shadowOffsetY = 16;
   ctx.beginPath();
   ctx.arc(ax + size / 2, ay + size / 2, size / 2, 0, Math.PI * 2);
   ctx.fillStyle = C.ink;
@@ -448,28 +429,31 @@ export function renderPfpShareCard(
   ctx.drawImage(pfp, ax, ay, size, size);
   ctx.restore();
 
-  // Copy block
-  const tx = 78;
+  const tx = 76;
   ctx.textBaseline = "alphabetic";
-  ctx.font = mono(f, 700, 22);
-  ctx.fillStyle = C.teal;
-  tracked(ctx, "NEW PROFILE PICTURE", tx, 214, 6);
+  ctx.font = mono(f, 700, 20);
+  ctx.fillStyle = C.yellow;
+  tracked(ctx, "NEW PROFILE PICTURE", tx, 210, 5);
 
-  ctx.font = disp(f, 900, 84);
-  ctx.fillStyle = C.sand;
-  ctx.fillText("HH GOA", tx, 310);
-  ctx.fillStyle = linearRamp(ctx, tx, 320, tx + 300, 400);
-  ctx.fillText("2026", tx, 396);
+  ctx.font = disp(f, 800, 96);
+  ctx.fillStyle = C.cream;
+  ctx.fillText("HH GOA", tx, 312);
+  ctx.fillStyle = C.yellow;
+  ctx.fillText("2026", tx, 400);
 
-  ctx.font = mono(f, 700, 24);
-  ctx.fillStyle = C.gold;
-  tracked(ctx, EVENT.hashtag.toUpperCase(), tx, 462, 5);
+  ctx.font = mono(f, 700, 20);
+  ctx.fillStyle = C.cream;
+  tracked(ctx, EVENT.motto, tx, 452, 4);
 
-  ctx.font = mono(f, 400, 20);
-  ctx.fillStyle = "rgba(255,244,228,0.55)";
-  tracked(ctx, `${EVENT.tagline} · ${EVENT.place}`, tx, 500, 4);
+  ctx.font = mono(f, 500, 17);
+  ctx.fillStyle = "rgba(255,251,232,0.55)";
+  tracked(ctx, `${EVENT.window} · ${EVENT.place}`, tx, 486, 3);
 
-  grain(ctx, W, H, 0.045);
+  ctx.font = mono(f, 700, 18);
+  ctx.fillStyle = C.yellow;
+  tracked(ctx, EVENT.hashtag.toUpperCase(), tx, 528, 3);
+
+  grain(ctx, W, H, 0.04);
   return canvas;
 }
 

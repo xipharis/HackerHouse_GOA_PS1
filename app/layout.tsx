@@ -6,19 +6,19 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
-  title: `${EVENT.full} — Frame & Builder ID Generator`,
-  description: `Drop a photo, get an on-brand ${EVENT.full} profile picture or builder ID card. Download it, share it. ${EVENT.hashtag}`,
+  title: `${EVENT.full} — Frame Generator`,
+  description: `Drop a photo, walk away with an ${EVENT.full} profile picture or builder pass. No login, no waiting. ${EVENT.hashtag}`,
   openGraph: {
     type: "website",
-    title: `${EVENT.full} — ${EVENT.tagline}`,
+    title: `${EVENT.full} — ${EVENT.motto}`,
     description: `Make your ${EVENT.hashtag} graphic in one pass.`,
     siteName: EVENT.full,
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", creator: EVENT.hostHandle },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#05061A",
+  themeColor: "#03190D",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

@@ -11,6 +11,7 @@ import { notFound } from "next/navigation";
 import { EVENT, OUT } from "@/lib/brand";
 import { getShare } from "@/lib/server/storage";
 import { requestSiteUrl } from "@/lib/server/site";
+import { Ambience, Footer, TopBar } from "@/app/chrome";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -22,9 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!share) return { title: `${EVENT.full} — Frame Generator` };
 
   const who = share.name?.trim();
-  const title = who
-    ? `${who} · ${EVENT.full}`
-    : `${EVENT.full} — ${EVENT.tagline}`;
+  const title = who ? `${who} · ${EVENT.full}` : `${EVENT.full} — ${EVENT.motto}`;
   const description = share.title
     ? `${who ?? "A builder"} — ${share.title}. Make your own ${EVENT.hashtag} graphic.`
     : `Make your own ${EVENT.full} graphic. ${EVENT.hashtag}`;
@@ -48,11 +47,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url,
       title,
       description,
-      siteName: `${EVENT.full}`,
+      siteName: EVENT.full,
       images: [image],
     },
     twitter: {
       card: "summary_large_image",
+      site: EVENT.hostHandle,
+      creator: EVENT.hostHandle,
       title,
       description,
       images: [image],
@@ -66,45 +67,58 @@ export default async function SharePage({ params }: Props) {
   if (!share) notFound();
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col items-center justify-center gap-6 p-6">
-      {/* Deliberately a plain <img>: the graphic is already rendered at exactly
-          the size it's displayed, so next/image would add a proxy hop and cost
-          for no gain. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={share.imageUrl}
-        alt={share.name ? `${share.name} — ${EVENT.full}` : EVENT.full}
-        width={OUT.cardW}
-        height={OUT.cardH}
-        className="w-full rounded-2xl border border-white/10 shadow-2xl"
-      />
+    <div className="grain relative min-h-dvh overflow-hidden bg-ink">
+      <Ambience />
+      <TopBar back />
 
-      <div className="text-center">
-        <p className="text-sm uppercase tracking-[0.2em] text-teal-300">
-          {EVENT.hashtag}
+      <main className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center px-5 pt-4 text-center sm:px-8">
+        {/* Deliberately a plain <img>: the graphic is already rendered at exactly
+            the size it's displayed, so next/image would add a proxy hop for no
+            gain — and the source is a Blob CDN URL that changes per share. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={share.imageUrl}
+          alt={share.name ? `${share.name} — ${EVENT.full}` : EVENT.full}
+          width={OUT.cardW}
+          height={OUT.cardH}
+          className="w-full rounded-2xl border border-cream/12 shadow-2xl"
+        />
+
+        <p className="mt-10 text-[11px] tracking-[0.24em] text-signal">
+          {EVENT.hashtag.toUpperCase()}
         </p>
-        <h1 className="mt-1 text-2xl font-black text-[#FFF4E4]">
+        <h1 className="font-display mt-3 text-4xl leading-[1.06] text-cream sm:text-6xl">
           {share.name ? `${share.name} is going to ${EVENT.full}` : EVENT.full}
         </h1>
         {share.title && (
-          <p className="mt-1 text-[#FFF4E4]/70">Certified {share.title}</p>
+          <p className="mt-3 text-sm text-cream/55">Certified {share.title}</p>
         )}
-      </div>
 
-      <Link
-        href="/"
-        className="rounded-full bg-gradient-to-r from-[#00E0C6] via-[#FF2E93] to-[#FFB347] px-6 py-3 font-bold text-[#05061A]"
-      >
-        Make yours →
-      </Link>
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/pfp"
+            className="rounded-full bg-signal px-6 py-3 text-xs font-bold tracking-wide text-forest transition-opacity hover:opacity-90"
+          >
+            MAKE YOUR PFP →
+          </Link>
+          <Link
+            href="/pass"
+            className="rounded-full border border-cream/20 px-6 py-3 text-xs font-bold tracking-wide text-cream transition-colors hover:border-signal hover:text-signal"
+          >
+            MAKE A BUILDER PASS →
+          </Link>
+        </div>
 
-      <a
-        href={share.imageUrl}
-        download={`hh-goa-2026-${share.id}.png`}
-        className="text-sm text-[#FFF4E4]/50 underline underline-offset-4"
-      >
-        Download this image
-      </a>
-    </main>
+        <a
+          href={share.imageUrl}
+          download={`hh-goa-2026-${share.id}.png`}
+          className="mt-6 text-[11px] tracking-[0.16em] text-cream/40 underline-offset-4 hover:text-signal hover:underline"
+        >
+          DOWNLOAD THIS IMAGE
+        </a>
+      </main>
+
+      <Footer />
+    </div>
   );
 }

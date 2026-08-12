@@ -1,7 +1,8 @@
 /**
  * HH Goa 2026 brand system.
- * Single source of truth for palette + copy, shared by the canvas renderers,
- * the share page and the UI.
+ *
+ * Palette and type follow hhgoa.com — deep green, signal yellow, cream — so the
+ * generated graphics read as part of the event, not as a third-party tool.
  */
 
 export const EVENT = {
@@ -10,32 +11,36 @@ export const EVENT = {
   wordmark: "HH GOA",
   full: "HH GOA 2026",
   hashtag: "#FrameInGoa",
-  tagline: "BUILD BY THE SEA",
+  motto: "LESS NOISE. MORE SIGNAL",
+  tagline: "4 days. one rhythm. everything intentional.",
   place: "GOA, INDIA",
+  window: "28 – 31 OCT 2026",
+  host: "2:47 pm Studio",
+  hostHandle: "@247pmstudio",
+  /** Printed on the builder pass. */
+  arrival: "29 OCT 2026",
+  departure: "31 OCT 2026",
 } as const;
 
-/** Goa sunset over a night ocean. */
 export const C = {
-  night: "#080B24",
-  deep: "#101641",
-  indigo: "#1E2470",
-  teal: "#00E0C6",
-  aqua: "#38BDF8",
-  coral: "#FF5E5B",
-  magenta: "#FF2E93",
-  amber: "#FFB347",
-  gold: "#FFD166",
-  sand: "#FFF4E4",
-  ink: "#05061A",
+  /** hhgoa.com primary green. */
+  green: "#0B6839",
+  greenDeep: "#075029",
+  greenDark: "#042E19",
+  ink: "#03190D",
+  /** Signal yellow, the accent everything hangs off. */
+  yellow: "#FEE101",
+  yellowWarm: "#EDD723",
+  yellowDeep: "#F9DC01",
+  cream: "#FFFBE8",
+  lime: "#9FD356",
 } as const;
 
-/** Sunset ramp used for rings, bars and highlights. */
-export const SUNSET: readonly [number, string][] = [
-  [0.0, C.teal],
-  [0.32, C.aqua],
-  [0.58, C.magenta],
-  [0.8, C.coral],
-  [1.0, C.amber],
+/** Yellow→lime sweep used for rings and rules. */
+export const SIGNAL: readonly [number, string][] = [
+  [0, C.yellow],
+  [0.5, C.yellowDeep],
+  [1, C.yellowWarm],
 ];
 
 export const OUT = {
@@ -48,15 +53,32 @@ export const OUT = {
 
 export type Format = "pfp" | "card";
 
+/** Pre-filled tweet copy. Tags the host studio and carries the hashtag. */
 export function tweetText(opts: {
   format: Format;
   name?: string;
   title?: string;
 }) {
   const who = opts.name?.trim();
+
   if (opts.format === "card") {
-    const t = opts.title ? ` — certified ${opts.title}.` : ".";
-    return `${who ? `${who} is` : "I'm"} heading to ${EVENT.full}${t}\nBuilding by the sea 🌴🌊\n\n${EVENT.hashtag}`;
+    return [
+      `${who ? `${who} is` : "I'm"} packing for ${EVENT.full} 🌴`,
+      opts.title ? `Builder pass says: ${opts.title}.` : "",
+      `${EVENT.arrival} → ${EVENT.departure} · ${EVENT.place}`,
+      "",
+      `Less noise, more signal. See you on the sand, ${EVENT.hostHandle}`,
+      EVENT.hashtag,
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
-  return `Locked in for ${EVENT.full} 🌴\nNew pfp, same shipping energy.\n\n${EVENT.hashtag}`;
+
+  return [
+    `New pfp, same shipping energy — ${EVENT.full} 🌴`,
+    "Less noise. More signal.",
+    "",
+    `Framed for the build-station by ${EVENT.hostHandle}`,
+    EVENT.hashtag,
+  ].join("\n");
 }

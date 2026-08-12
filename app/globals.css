@@ -1,32 +1,68 @@
 @import "tailwindcss";
 
+/* Palette lifted from hhgoa.com: deep green ground, one signal yellow, cream. */
 @theme inline {
-  --color-night: #080b24;
-  --color-deep: #101641;
-  --color-ink: #05061a;
-  --color-teal: #00e0c6;
-  --color-aqua: #38bdf8;
-  --color-coral: #ff5e5b;
-  --color-magenta: #ff2e93;
-  --color-amber: #ffb347;
-  --color-gold: #ffd166;
-  --color-sand: #fff4e4;
-  --font-sans: var(--font-display);
+  --color-forest: #0b6839;
+  --color-forest-deep: #075029;
+  --color-night: #042e19;
+  --color-ink: #03190d;
+  --color-signal: #fee101;
+  --color-signal-warm: #edd723;
+  --color-cream: #fffbe8;
+  --color-moss: #9fd356;
+
+  --font-sans: var(--font-mono);
+  --font-display: var(--font-display);
   --font-mono: var(--font-mono);
 }
 
-html,
+html {
+  background: #03190d;
+  scroll-behavior: smooth;
+}
+
 body {
-  background: #05061a;
-  color: #fff4e4;
+  background: #03190d;
+  color: #fffbe8;
+  font-family: var(--font-mono), ui-monospace, monospace;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
-body {
-  font-family: var(--font-display), system-ui, sans-serif;
+/* Imbue is a high-contrast display serif — it earns its keep only at size. */
+.font-display {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 0.92;
 }
 
-/* Range inputs are the one control the generator leans on; make them legible. */
+/* A faint paper tooth over flat green, so large fills don't look plastic. */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.5'/></svg>");
+}
+
 input[type="range"] {
-  accent-color: #00e0c6;
+  accent-color: #fee101;
+}
+
+::selection {
+  background: #fee101;
+  color: #0b6839;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
