@@ -176,7 +176,12 @@ export default function Generator({ format }: { format: Format }) {
   // snapshot is pinned to false and the real value arrives on the client.
   const canShareFiles = useSyncExternalStore(
     noopSubscribe,
-    () => typeof navigator.canShare === "function",
+    () =>
+      typeof navigator.canShare === "function" &&
+      // Desktop share sheets are the OS's own and usually have no X entry, so a
+      // file attachment is only offered on touch devices, where the sheet lists
+      // installed apps.
+      window.matchMedia("(pointer: coarse)").matches,
     () => false,
   );
 
@@ -271,44 +276,24 @@ export default function Generator({ format }: { format: Format }) {
   };
 
   /**
-   * Share to X, attaching the real image wherever the platform permits it.
+   * Share to X. Always opens an X compose window — no exceptions.
    *
-   * X's web intent cannot carry an image — that is a limitation of the intent
-   * itself. The Web Share API can, so we prefer it: on iOS/Android (and Safari
-   * on macOS) picking X from the sheet opens a compose window with the graphic
-   * genuinely attached. Everywhere else we fall back to the intent plus a link
-   * whose OG image is the graphic, so it still renders in the timeline.
+   * An earlier version preferred the Web Share API here because it can carry a
+   * real file. That was wrong: on desktop the native sheet is the *operating
+   * system's* (AirDrop, Mail, Messages) and frequently has no X in it at all,
+   * so a button labelled "Share to X" did not reliably reach X. The intent is
+   * the only path that always lands in a pre-filled X composer, so it owns this
+   * button; attaching the file is offered separately, where it genuinely works.
    */
   const shareToX = async () => {
     if (!photo || sharing) return;
+    setSharing(true);
     setNote(null);
 
-    /* --- preferred: a real image attachment via the native sheet --- */
-    const ready = prebuilt.current?.key === shareKey ? prebuilt.current.blob : null;
-    if (canShareFiles && ready) {
-      const file = new File([ready], filename().replace(/\.png$/, ".jpg"), {
-        type: "image/jpeg",
-      });
-      if (navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            // The site itself, so the "create your own" link needs no upload and
-            // the sheet opens inside the click's activation window.
-            text: caption(`${window.location.origin}/${format === "card" ? "pass" : "pfp"}`),
-          });
-          return;
-        } catch (e) {
-          // A dismissed sheet is not a failure; anything else falls through.
-          if (e instanceof Error && e.name === "AbortError") return;
-        }
-      }
-    }
-
-    /* --- fallback: intent + a link that unfurls to the graphic --- */
-    setSharing(true);
     // Opened synchronously so Safari doesn't treat it as a blocked popup.
     const win = window.open("about:blank", "_blank");
+    const ready = prebuilt.current?.key === shareKey ? prebuilt.current.blob : null;
+
     try {
       const url = await uploadShare(ready ?? (await buildShareImage()));
       // The link goes inside the body, not the intent's `url` parameter, which
@@ -321,10 +306,40 @@ export default function Generator({ format }: { format: Format }) {
       setNote(
         e instanceof Error && e.message
           ? e.message
-          : "Share link failed — you can still download and post it manually.",
+          : "Couldn't reach the server. Download the PNG and post it manually.",
       );
     } finally {
       setSharing(false);
+    }
+  };
+
+  /**
+   * Hands the actual image file to the share sheet, which on a phone includes
+   * the X app and produces a post with a true image attachment. Only offered on
+   * touch devices for the reason above.
+   */
+  const shareWithImage = async () => {
+    if (!photo) return;
+    setNote(null);
+    const ready = prebuilt.current?.key === shareKey ? prebuilt.current.blob : null;
+    try {
+      const blob = ready ?? (await buildShareImage());
+      const file = new File([blob], filename().replace(/\.png$/, ".jpg"), {
+        type: "image/jpeg",
+      });
+      if (!navigator.canShare?.({ files: [file] })) {
+        setNote("This device can't attach images — use Share to X.");
+        return;
+      }
+      await navigator.share({
+        files: [file],
+        // The site itself, so no upload is needed and the sheet opens inside
+        // the click's activation window.
+        text: caption(`${window.location.origin}/${format === "card" ? "pass" : "pfp"}`),
+      });
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setNote("Couldn't open the share sheet — use Share to X.");
     }
   };
 
@@ -525,6 +540,16 @@ export default function Generator({ format }: { format: Format }) {
               {sharing ? "PREPARING…" : "SHARE TO X"}
             </button>
 
+            {canShareFiles && (
+              <button
+                disabled={!photo}
+                onClick={shareWithImage}
+                className="rounded-xl border border-signal/50 px-4 py-2.5 text-[11px] font-bold tracking-wide text-signal transition-colors hover:bg-signal/10 disabled:opacity-25"
+              >
+                POST WITH IMAGE ATTACHED
+              </button>
+            )}
+
             <button
               disabled={!photo || sharing}
               onClick={copyCaption}
@@ -535,8 +560,8 @@ export default function Generator({ format }: { format: Format }) {
 
             <p className="text-[10px] leading-relaxed text-cream/30">
               {canShareFiles
-                ? "SHARE TO X ATTACHES THE IMAGE VIA YOUR SHARE SHEET."
-                : "X CAN'T ATTACH FILES FROM A LINK — THE POST SHOWS YOUR GRAPHIC AS ITS PREVIEW CARD. FOR A TRUE ATTACHMENT, DOWNLOAD THE PNG AND DRAG IT IN."}
+                ? "SHARE TO X OPENS A PRE-FILLED POST WHERE YOUR GRAPHIC IS THE PREVIEW CARD. FOR A TRUE ATTACHMENT, USE POST WITH IMAGE ATTACHED."
+                : "X CAN'T ATTACH A FILE FROM A LINK — YOUR POST SHOWS THE GRAPHIC AS ITS PREVIEW CARD. FOR A TRUE ATTACHMENT, DOWNLOAD THE PNG AND DRAG IT IN."}
             </p>
           </div>
 

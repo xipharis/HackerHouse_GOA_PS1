@@ -17,9 +17,9 @@ const check = (l, ok, extra = "") => {
 
 const b = await chromium.launch();
 
-/* ---- 1. platform WITH file sharing: expect a real attachment ------------ */
-console.log("\n[share sheet supports files]");
-const ctx = await b.newContext();
+/* ---- 1. touch device: the attach button must hand over a real file ------ */
+console.log("\n[touch device: POST WITH IMAGE ATTACHED]");
+const ctx = await b.newContext({ hasTouch: true, isMobile: true, viewport: { width: 420, height: 900 } });
 // Stand in for a mobile share sheet and record what it was handed.
 await ctx.addInitScript(() => {
   window.__shared = null;
@@ -39,7 +39,7 @@ await p.getByRole("textbox").nth(0).fill("Aparna Krishnamurthy");
 await p.getByRole("textbox").nth(1).fill("Rust · distributed systems");
 // The share image is pre-built on a timer so the click keeps its activation.
 await p.waitForTimeout(1500);
-await p.getByRole("button", { name: "SHARE TO X" }).click();
+await p.getByRole("button", { name: "POST WITH IMAGE ATTACHED" }).click();
 await p.waitForTimeout(1200);
 
 const shared = await p.evaluate(() => window.__shared);
@@ -53,12 +53,17 @@ check("caption has both hashtags", /#FrameInGoa #HHGoa2026/.test(shared?.text ??
 check("no popup was opened", p.context().pages().length === 1);
 await ctx.close();
 
-/* ---- 2. platform WITHOUT file sharing: expect the intent fallback ------- */
-console.log("\n[share sheet cannot take files]");
+/* ---- 2. Share to X must ALWAYS reach an X composer, on every platform --- */
+console.log("\n[desktop: SHARE TO X always opens the X intent]");
 const ctx2 = await b.newContext();
 await ctx2.addInitScript(() => {
-  delete navigator.canShare;
-  delete navigator.share;
+  // A desktop OS share sheet exists but has no X entry — the old bug. Share to
+  // X must ignore it entirely and go straight to the intent.
+  window.__sharedDesktop = false;
+  navigator.canShare = () => true;
+  navigator.share = async () => {
+    window.__sharedDesktop = true;
+  };
 });
 let intent = null;
 await ctx2.route(/x\.com/, (r) => {
@@ -75,12 +80,14 @@ try {
   const w = await pop;
   await w.waitForURL(/x\.com/, { timeout: 20000 });
   const text = new URL(intent ?? w.url()).searchParams.get("text") ?? "";
-  check("falls back to the X intent", /\/intent\/(post|tweet)/.test(new URL(intent).pathname));
+  check("opens the X intent", /\/intent\/(post|tweet)/.test(new URL(intent).pathname));
+  check("did NOT hijack to the OS share sheet",
+        (await p2.evaluate(() => window.__sharedDesktop)) === false);
   check("caption survives the fallback", /Embracing the vibe/.test(text));
   check("link is in the body, not appended after the hashtags",
         text.trimEnd().endsWith("#FrameInGoa #HHGoa2026"));
 } catch (e) {
-  check("falls back to the X intent", false, e.message.split("\n")[0]);
+  check("opens the X intent", false, e.message.split("\n")[0]);
 }
 await ctx2.close();
 
