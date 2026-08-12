@@ -27,7 +27,12 @@ type Status =
   | { k: "ready" }
   | { k: "error"; msg: string };
 
-const ACCEPT = "image/*,.heic,.heif,.HEIC,.HEIF";
+// Extension hints alongside image/* because iOS/Android pickers sometimes grey
+// out HEIC files when only the wildcard is given. Matching is case-insensitive.
+const ACCEPT = "image/*,.heic,.heif";
+
+/** Hoisted: an inline subscribe would re-subscribe on every single render. */
+const noopSubscribe = () => () => {};
 
 export default function Generator() {
   const [format, setFormat] = useState<Format>("pfp");
@@ -47,7 +52,6 @@ export default function Generator() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const shareCanvasRef = useRef<HTMLCanvasElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const title = titleOverride ?? builderTitle(name || "builder", stack, seed);
 
@@ -238,7 +242,7 @@ export default function Generator() {
   // Reading `navigator` during render would desync hydration, so the server
   // snapshot is pinned to false and the real value arrives on the client.
   const canShareFiles = useSyncExternalStore(
-    () => () => {},
+    noopSubscribe,
     () => typeof navigator.canShare === "function",
     () => false,
   );
@@ -303,17 +307,15 @@ export default function Generator() {
             />
 
             {!photo && (
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center"
-              >
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
                 <span className="rounded-full bg-gradient-to-r from-teal via-magenta to-amber px-6 py-3 font-bold text-ink">
                   {status.k === "reading" ? "Reading photo…" : "Upload a photo"}
                 </span>
                 <span className="text-sm text-sand/50">
                   or drop it here · JPG, PNG, WebP, HEIC
                 </span>
-              </button>
+                <FileInput onPick={accept} label="Upload a photo" />
+              </div>
             )}
 
             {status.k === "reading" && photo && (
@@ -348,20 +350,10 @@ export default function Generator() {
 
         {/* ----------------------------------------------------- controls */}
         <aside className="flex flex-col gap-4">
-          <input
-            ref={fileRef}
-            type="file"
-            accept={ACCEPT}
-            className="hidden"
-            onChange={(e) => void accept(e.target.files?.[0])}
-          />
-
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold hover:bg-white/10"
-          >
+          <div className="relative rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center text-sm font-bold hover:bg-white/10 focus-within:border-teal">
             {photo ? "Change photo" : "Choose photo"}
-          </button>
+            <FileInput onPick={accept} label={photo ? "Change photo" : "Choose photo"} />
+          </div>
 
           {photo && (
             <label className="text-xs text-sand/50">
@@ -460,6 +452,37 @@ export default function Generator() {
 }
 
 /* ------------------------------------------------------------ small parts */
+
+/**
+ * The real file input, stretched invisibly over its trigger.
+ *
+ * Every indirection — `display:none` + a scripted `.click()`, or a `<label for>`
+ * pointing at an `sr-only` input — is refused by at least one browser: Safari
+ * declines to open a picker for an input it doesn't consider visible. Making the
+ * input itself the click target is the one approach with no such caveat, and it
+ * keeps native keyboard activation and drag-and-drop for free.
+ */
+function FileInput({
+  onPick,
+  label,
+}: {
+  onPick: (file: File | undefined) => void;
+  label: string;
+}) {
+  return (
+    <input
+      type="file"
+      accept={ACCEPT}
+      aria-label={label}
+      onChange={(e) => {
+        onPick(e.target.files?.[0]);
+        // Clear it so re-picking the same file still fires a change event.
+        e.target.value = "";
+      }}
+      className="absolute inset-0 h-full w-full cursor-pointer opacity-0 outline-none"
+    />
+  );
+}
 
 function Field({
   label,
