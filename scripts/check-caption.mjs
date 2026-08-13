@@ -73,10 +73,12 @@ const typical = await captionFor("/pass", [
   "Aparna Krishnamurthy",
   "Rust · distributed systems",
   "Bengaluru, IN",
+  "Team Feni",
 ]);
 check("pass, typical fields", weighted(typical));
 
-const maxed = await captionFor("/pass", [long, long, "Mumbai, IN", long]);
+// name, stack, team, builder title — the caption carries name, stack and title.
+const maxed = await captionFor("/pass", [long, long, "Mumbai, IN", long, long]);
 check("pass, three 40-char fields", weighted(maxed));
 
 // The hashtags and link must survive whatever trimming happened.
@@ -86,7 +88,8 @@ const keeps = (t, what, re) => {
   console.log(`  ${ok ? "✓" : "✗"} ${what}`);
 };
 keeps(maxed, "hashtags survive trimming", /#FrameInGoa #HHGoa2026$/);
-keeps(maxed, "link survives trimming", /https?:\/\/\S+\/s\/[a-z0-9]+/i);
+// The card is attached to the post, so the link is the "make your own" CTA.
+keeps(maxed, "link survives trimming", /https?:\/\/\S+\/(pass|pfp)\b/i);
 keeps(maxed, "name line survives trimming", /😎 My name - W/);
 
 console.log("\n  --- maxed-out caption ---");

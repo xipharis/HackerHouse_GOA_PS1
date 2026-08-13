@@ -18,7 +18,7 @@ set in **Playfair Display**, **Cabinet Grotesk** and **JetBrains Mono**.
 | --- | --- |
 | [`/`](https://hh-goa-frame-mu.vercel.app) | Landing page with the two entry points |
 | [`/pfp`](https://hh-goa-frame-mu.vercel.app/pfp) | **Format A** — 1024×1024 profile picture in a signal-yellow ring |
-| [`/pass`](https://hh-goa-frame-mu.vercel.app/pass) | **Format B** — 1080×1350 builder pass (name, stack, departure city, builder title, dates) |
+| [`/pass`](https://hh-goa-frame-mu.vercel.app/pass) | **Format B** — 1080×1350 builder pass (name, stack, departure city, team, builder title, dates) |
 | `/s/[id]` | The link you tweet; its `og:image` *is* the generated graphic |
 
 The pass carries the event's dates: **28–31 Oct 2026**.
@@ -46,16 +46,19 @@ loading screen.
 
 Two buttons, because no single mechanism does both jobs:
 
-- **Share to X** always opens the X compose intent, pre-filled. It uploads two
-  images first — the 1200×630 link card and the graphic at its own aspect ratio
-  — and puts the resulting `/s/<id>` link in the body. That link's `og:image` is
-  the link card, so the post's preview shows real artwork rather than a default
-  thumbnail, and the page behind it shows (and downloads) the uncropped graphic.
-  An intent URL cannot carry a file, so this is the only image a desktop post
-  can show.
-- **Post with image attached** appears only on touch devices and hands both
-  JPEGs — the graphic first, then the link card — to the share sheet via the Web
-  Share API, producing a post with two true image attachments.
+- **Share to X** always opens the X compose intent, pre-filled — and puts the
+  card *itself* in the post rather than a link to it. An intent URL cannot carry
+  a file, so the PNG goes onto the clipboard (as a `ClipboardItem` holding the
+  still-encoding blob, which keeps the write inside the click's activation) and
+  one ⌘V in the composer attaches it. The caption's link is then the call to
+  action — where to make your own — not a pointer at the image.
+- **Post with image attached** appears only on touch devices and hands the JPEGs
+  — the graphic first, then the landscape card — to the share sheet via the Web
+  Share API, producing a post with true image attachments.
+
+Only a browser that cannot put an image on the clipboard at all (Firefox) falls
+back to uploading and linking `/s/<id>`, whose `og:image` is the 1200×630 card,
+so even then the post shows the artwork rather than a default thumbnail.
 
 The split matters: the Web Share API can carry a file but on desktop it opens
 the *operating system's* sheet (AirDrop, Mail, Messages), which frequently has no

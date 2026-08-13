@@ -23,6 +23,8 @@ export type PassFields = {
   stack: string;
   /** Where the builder is flying in from. Printed as DEPARTING FROM. */
   departure?: string;
+  /** Optional crew, stamped into the top-right corner of the pass. */
+  team?: string;
   title: string;
   seed?: number;
 };
@@ -414,7 +416,7 @@ export function drawPass(
 ) {
   const v = w / OUT.cardW;
   const f = opts.fonts;
-  const { name, stack, departure, title, seed = 0 } = opts.fields;
+  const { name, stack, departure, team, title, seed = 0 } = opts.fields;
   const serif = (weight: number, size: number) => `${weight} ${size * v}px ${f.serif}`;
   const grot = (weight: number, size: number) => `${weight} ${size * v}px ${f.grotesk}`;
   const mono = (weight: number, size: number) => `${weight} ${size * v}px ${f.mono}`;
@@ -481,13 +483,31 @@ export function drawPass(
   palm(ctx, hx + hw * 0.94, hy + hh * 0.72, 66 * v, PASS.yellow, 2.2 * v, -1);
   ctx.restore();
 
-  ctx.save();
-  ctx.globalAlpha = 0.55;
-  dotGrid(ctx, hx + hw * 0.72, hy + 30 * v, 13 * v, 2 * v, PASS.pink);
-  ctx.restore();
+  const teamName = team?.trim();
+  if (!teamName) {
+    // Printer's dots, there to keep the corner from reading as empty. The team
+    // stamp below takes that corner when there is one.
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    dotGrid(ctx, hx + hw * 0.72, hy + 30 * v, 13 * v, 2 * v, PASS.pink);
+    ctx.restore();
+  }
 
   const tx = hx + 34 * v;
   ctx.textBaseline = "alphabetic";
+
+  /* The team stamp — mirrors the lockup on the left, set hard to the right
+     margin so it reads as the corner it's stamped into. */
+  if (teamName) {
+    const rx = hx + hw - 34 * v;
+    ctx.fillStyle = "rgba(240,232,208,0.72)";
+    ctx.font = mono(400, 15);
+    run(ctx, "TEAM", rx, hy + 58 * v, 2.2 * v, "right");
+
+    const fit = fitText(ctx, teamName.toUpperCase(), 360 * v, 26 * v, 15 * v, 700, f.grotesk, v);
+    ctx.fillStyle = PASS.yellow;
+    run(ctx, fit.text, rx, hy + 92 * v, v, "right");
+  }
 
   ctx.fillStyle = PASS.yellow;
   ctx.font = grot(700, 34);

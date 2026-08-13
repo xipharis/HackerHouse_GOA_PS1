@@ -66,6 +66,7 @@ export default function Generator({ format }: { format: Format }) {
   const [name, setName] = useState("");
   const [stack, setStack] = useState("");
   const [departure, setDeparture] = useState("");
+  const [team, setTeam] = useState("");
   const [seed, setSeed] = useState(0);
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
 
@@ -99,10 +100,10 @@ export default function Generator({ format }: { format: Format }) {
         photo,
         fonts: passFonts,
         framing,
-        fields: { name, stack, departure, title, seed },
+        fields: { name, stack, departure, team, title, seed },
       });
     }
-  }, [photo, format, framing, name, stack, departure, title, seed]);
+  }, [photo, format, framing, name, stack, departure, team, title, seed]);
 
   // Every input change repaints synchronously — no debounce needed, a full
   // composite is a couple of milliseconds.
@@ -225,16 +226,18 @@ export default function Generator({ format }: { format: Format }) {
    * pass is portrait), so both get composed into a landscape card, or X would
    * centre-crop them into a strip when it unfurls the link.
    *
-   * `raw` is the graphic itself, uncropped and uncomposed. It's what the share
-   * page shows, what the download link hands over, and the first file attached
-   * when the share sheet can carry one.
+   * `raw` is the graphic itself, uncropped and uncomposed — the first file
+   * attached when the share sheet can carry one. JPEG rather than PNG: ~6×
+   * smaller over a phone connection, and the artwork is all flat fills, so the
+   * difference is invisible.
    *
-   * JPEG rather than PNG: ~6× smaller over a phone connection, and the artwork
-   * is all flat fills, so the difference is invisible.
+   * `png` is that same graphic as a PNG, because image/png is the only type
+   * browsers reliably accept on the clipboard.
    */
   const buildShareImages = useCallback(async (): Promise<{
     card: Blob;
     raw: Blob;
+    png: Blob;
   }> => {
     const canvas = canvasRef.current!;
     const sc = shareCanvasRef.current!;
@@ -243,25 +246,27 @@ export default function Generator({ format }: { format: Format }) {
         photo,
         fonts: passFonts,
         framing,
-        fields: { name, stack, departure, title, seed },
+        fields: { name, stack, departure, team, title, seed },
       });
     } else {
       renderPfpShareCard(sc, canvas, canvasFonts);
     }
-    const [card, raw] = await Promise.all([
+    const [card, raw, png] = await Promise.all([
       toBlob(sc, "image/jpeg", 0.92),
       toBlob(canvas, "image/jpeg", 0.95),
+      toBlob(canvas),
     ]);
-    return { card, raw };
-  }, [format, photo, framing, name, stack, departure, title, seed]);
+    return { card, raw, png };
+  }, [format, photo, framing, name, stack, departure, team, title, seed]);
 
   /**
    * Identity of the artwork currently on the canvas. Used to tell whether the
    * pre-built share image is still current.
    */
   const shareKey = useMemo(
-    () => JSON.stringify([format, photoId, name, stack, departure, title, seed, framing]),
-    [format, photoId, name, stack, departure, title, seed, framing],
+    () =>
+      JSON.stringify([format, photoId, name, stack, departure, team, title, seed, framing]),
+    [format, photoId, name, stack, departure, team, title, seed, framing],
   );
 
   /**
@@ -271,14 +276,16 @@ export default function Generator({ format }: { format: Format }) {
    * activation is alive, and awaiting a canvas encode is enough to lose it. So
    * the blob has to be ready *before* the user clicks, not after.
    */
-  const prebuilt = useRef<{ key: string; card: Blob; raw: Blob } | null>(null);
+  const prebuilt = useRef<{ key: string; card: Blob; raw: Blob; png: Blob } | null>(
+    null,
+  );
   useEffect(() => {
     if (!photo || !fontsReady) return;
     let cancelled = false;
     const t = setTimeout(() => {
       buildShareImages()
-        .then(({ card, raw }) => {
-          if (!cancelled) prebuilt.current = { key: shareKey, card, raw };
+        .then((images) => {
+          if (!cancelled) prebuilt.current = { key: shareKey, ...images };
         })
         .catch(() => undefined);
     }, 400);
@@ -319,38 +326,72 @@ export default function Generator({ format }: { format: Format }) {
     return url;
   };
 
+  /** Whether this browser can put an image on the clipboard at all. */
+  const canCopyImage = () =>
+    typeof ClipboardItem !== "undefined" &&
+    typeof navigator.clipboard?.write === "function";
+
   /**
    * Share to X. Always opens an X compose window — no exceptions.
    *
-   * An earlier version preferred the Web Share API here because it can carry a
-   * real file. That was wrong: on desktop the native sheet is the *operating
-   * system's* (AirDrop, Mail, Messages) and frequently has no X in it at all,
-   * so a button labelled "Share to X" did not reliably reach X. The intent is
-   * the only path that always lands in a pre-filled X composer, so it owns this
-   * button; attaching the file is offered separately, where it genuinely works.
+   * The card itself goes into the post, not a link to it. An intent URL can't
+   * carry a file, so the image travels via the clipboard and the user pastes it
+   * into the composer that just opened; where the clipboard refuses images it's
+   * downloaded to be dragged in instead. Only a browser that can do neither
+   * falls back to the /s permalink, where the graphic is at least the preview.
+   *
+   * An earlier version used the Web Share API here. That was wrong: on desktop
+   * the native sheet is the *operating system's* (AirDrop, Mail, Messages) and
+   * frequently has no X in it at all, so a button labelled "Share to X" did not
+   * reliably reach X. The sheet is offered separately, where it genuinely works.
    */
   const shareToX = async () => {
     if (!photo || sharing) return;
     setSharing(true);
     setNote(null);
 
-    // Opened synchronously so Safari doesn't treat it as a blocked popup.
+    // Both of these must happen inside the click's transient activation, before
+    // the first await — the popup or Safari blocks it, and the clipboard write
+    // or every browser rejects it. ClipboardItem accepts a promise for exactly
+    // this reason, so the encode can still be in flight here.
     const win = window.open("about:blank", "_blank");
+    const images = shareImages();
+    const copy = canCopyImage()
+      ? navigator.clipboard.write([
+          new ClipboardItem({ "image/png": images.then((i) => i.png) }),
+        ])
+      : null;
 
-    try {
-      const url = await uploadShare(await shareImages());
-      // The link goes inside the body, not the intent's `url` parameter, which
-      // X would append after the hashtags and break the layout.
-      const intent = `https://x.com/intent/post?text=${encodeURIComponent(caption(url))}`;
+    // The link goes inside the body, not the intent's `url` parameter, which X
+    // would append after the hashtags and break the layout.
+    const open = (link: string) => {
+      const intent = `https://x.com/intent/post?text=${encodeURIComponent(caption(link))}`;
       if (win) win.location.href = intent;
       else window.location.href = intent;
-    } catch (e) {
-      win?.close();
-      setNote(
-        e instanceof Error && e.message
-          ? e.message
-          : "Couldn't reach the server. Download the PNG and post it manually.",
-      );
+    };
+    // With the card in the post, the caption's link is the call to action —
+    // where to make one — rather than a pointer at the image.
+    const home = `${window.location.origin}/${format === "card" ? "pass" : "pfp"}`;
+
+    try {
+      if (copy) {
+        await copy;
+        open(home);
+        setNote("Card copied — press ⌘V / Ctrl+V in the post to attach it.");
+        return;
+      }
+      // No image clipboard (Firefox): the permalink at least unfurls to the art.
+      open(await uploadShare(await images));
+    } catch {
+      // The clipboard rejected mid-flight — hand over the file instead.
+      try {
+        await download();
+        open(home);
+        setNote("Card downloaded — drag it into the post to attach it.");
+      } catch {
+        win?.close();
+        setNote("Couldn't attach the card. Download it and post it manually.");
+      }
     } finally {
       setSharing(false);
     }
@@ -396,21 +437,15 @@ export default function Generator({ format }: { format: Format }) {
     }
   };
 
-  /** Desktop escape hatch: caption on the clipboard, image already downloaded. */
+  /** Escape hatch: the caption alone, for a post assembled by hand. */
   const copyCaption = async () => {
     if (!photo) return;
     try {
-      let link = shareUrl;
-      if (!link) {
-        setSharing(true);
-        link = await uploadShare(await shareImages());
-      }
-      await navigator.clipboard.writeText(caption(link));
-      setNote("Caption copied. Download the image and attach it in X.");
+      const home = `${window.location.origin}/${format === "card" ? "pass" : "pfp"}`;
+      await navigator.clipboard.writeText(caption(shareUrl ?? home));
+      setNote("Caption copied. Download the card and attach it in X.");
     } catch {
       setNote("Couldn't copy the caption — select it from the link below.");
-    } finally {
-      setSharing(false);
     }
   };
 
@@ -547,6 +582,12 @@ export default function Generator({ format }: { format: Format }) {
                 onChange={setDeparture}
                 placeholder="Bengaluru, IN"
               />
+              <Field
+                label="Team"
+                value={team}
+                onChange={setTeam}
+                placeholder="Team Feni"
+              />
 
               <div>
                 <div className="flex items-baseline justify-between">
@@ -620,8 +661,8 @@ export default function Generator({ format }: { format: Format }) {
 
             <p className="text-[10px] leading-relaxed text-cream/30">
               {canShareFiles
-                ? "SHARE TO X OPENS A PRE-FILLED POST WHERE YOUR GRAPHIC IS THE PREVIEW CARD. FOR A TRUE ATTACHMENT, USE POST WITH IMAGE ATTACHED."
-                : "X CAN'T ATTACH A FILE FROM A LINK — YOUR POST SHOWS THE GRAPHIC AS ITS PREVIEW CARD. FOR A TRUE ATTACHMENT, DOWNLOAD THE PNG AND DRAG IT IN."}
+                ? "SHARE TO X COPIES THE CARD AND OPENS A PRE-FILLED POST — PASTE IT IN. OR USE POST WITH IMAGE ATTACHED TO SEND IT STRAIGHT TO THE X APP."
+                : "SHARE TO X COPIES THE CARD AND OPENS A PRE-FILLED POST — PRESS ⌘V / CTRL+V TO ATTACH IT. X CAN'T TAKE A FILE FROM A LINK, SO THE PASTE IS WHAT PUTS THE REAL IMAGE IN YOUR POST."}
             </p>
           </div>
 

@@ -145,6 +145,7 @@ async function run() {
   await page.getByRole("textbox").nth(0).fill("Aparna Krishnamurthy");
   await page.getByRole("textbox").nth(1).fill("Rust · distributed systems");
   await page.getByRole("textbox").nth(2).fill("Bengaluru, IN");
+  await page.getByRole("textbox").nth(3).fill("Team Feni");
   await page.waitForTimeout(250);
 
   const cardDims = await page.evaluate(() => {
@@ -155,7 +156,7 @@ async function run() {
     ? ok("pass rendered 1080×1350")
     : bad(`pass wrong size ${cardDims.w}×${cardDims.h}`);
 
-  const title = await page.getByRole("textbox").nth(3).inputValue();
+  const title = await page.getByRole("textbox").nth(4).inputValue();
   /rust|borrow|zero-cost|memory-safe/i.test(title)
     ? ok(`stack-aware builder title: "${title}"`)
     : bad(`title ignored the stack: "${title}"`);
@@ -183,6 +184,26 @@ async function run() {
   }
 
   /* -------------------------------------------------- share, both formats */
+  // The card goes into the post via the clipboard, so record what lands there.
+  // Installed for this page *and* every later navigation, since the recorder
+  // lives on `window` and each goto wipes it.
+  const recordClipboard = () => {
+    window.__clipboard = [];
+    const write = navigator.clipboard.write?.bind(navigator.clipboard);
+    navigator.clipboard.write = async (items) => {
+      window.__clipboard.push(...items.flatMap((i) => i.types));
+      // Chromium can refuse a real write without a focused document; the page's
+      // own error path is covered by the clipboard-less run below.
+      try {
+        await write?.(items);
+      } catch {
+        /* recorded either way */
+      }
+    };
+  };
+  await ctx.addInitScript(recordClipboard);
+  await page.evaluate(recordClipboard);
+
   // Stub x.com so the test captures each intent URL as-issued, before any
   // redirect to a login flow can rewrite it.
   const intents = [];
@@ -209,8 +230,17 @@ async function run() {
 
       const text = u.searchParams.get("text") ?? "";
       // The link now lives inside the body so the hashtags stay last; X would
-      // append an intent `url` parameter after them.
+      // append an intent `url` parameter after them. With the card attached it
+      // points at the generator; only the no-clipboard fallback links to /s.
       shareUrl = (text.match(/https?:\/\/\S+\/s\/[a-z0-9]+/i) ?? [])[0] ?? null;
+
+      const copied = await page.evaluate(() => window.__clipboard ?? []);
+      copied.includes("image/png")
+        ? ok("the card itself was copied for the post")
+        : bad(`no image on the clipboard: ${JSON.stringify(copied)}`);
+      shareUrl
+        ? bad("caption still points at the /s permalink instead of attaching")
+        : ok("caption links to the generator, not to the image");
 
       /#FrameInGoa/.test(text)
         ? ok("caption carries #FrameInGoa")
@@ -229,7 +259,6 @@ async function run() {
       text.trimEnd().endsWith("#FrameInGoa #HHGoa2026")
         ? ok("hashtags land last")
         : bad(`caption does not end with the hashtags: ${JSON.stringify(text.slice(-40))}`);
-      shareUrl ? ok(`share link in body: ${shareUrl}`) : bad("no share link in caption");
 
       const weight = tweetWeight(text);
       weight <= 280
@@ -242,6 +271,9 @@ async function run() {
       bad(`share to X failed (${label}): ${e.message}`);
       return;
     }
+
+    // The permalink only appears on the fallback path, which has its own run.
+    if (!shareUrl) return;
 
     /* OG tags must resolve to the real graphic, not a default thumbnail. */
     const og = await ctx.newPage();
@@ -308,6 +340,57 @@ async function run() {
 
   await page.screenshot({ path: path.join(OUT, "desktop.png"), fullPage: true });
   await ctx.close();
+
+  /* ------------------------- fallback: a browser with no image clipboard */
+  // Firefox can't put an image on the clipboard, so the post falls back to the
+  // /s permalink, whose preview card must still be the real graphic.
+  console.log("\n[share fallback: no image clipboard]");
+  const fctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await fctx.addInitScript(() => {
+    delete window.ClipboardItem;
+  });
+  const fintents = [];
+  await fctx.route(/x\.com/, (route) => {
+    fintents.push(route.request().url());
+    route.fulfill({ contentType: "text/html", body: "<h1>stub</h1>" });
+  });
+  const fpage = await fctx.newPage();
+  await fpage.goto(BASE + "/pass", { waitUntil: "networkidle" });
+  await fpage.setInputFiles('input[type="file"]', path.join(FIX, "person.jpg"));
+  await fpage.waitForFunction(() => document.querySelector("canvas")?.width === 1080, {
+    timeout: 20000,
+  });
+  await fpage.getByRole("textbox").nth(0).fill("Aparna Krishnamurthy");
+  await fpage.waitForTimeout(800);
+  try {
+    const fpopup = fpage.waitForEvent("popup", { timeout: 25000 });
+    await fpage.getByRole("button", { name: "Share to X" }).click();
+    const popup = await fpopup;
+    await popup.waitForURL(/x\.com/, { timeout: 25000 });
+    const text = new URL(fintents[0] ?? popup.url()).searchParams.get("text") ?? "";
+    const link = (text.match(/https?:\/\/\S+\/s\/[a-z0-9]+/i) ?? [])[0] ?? null;
+    link
+      ? ok(`falls back to the permalink: ${link}`)
+      : bad(`no permalink in the fallback caption: ${text.slice(0, 80)}`);
+    await popup.close();
+
+    if (link) {
+      const og = await fctx.newPage();
+      await og.goto(link, { waitUntil: "networkidle" });
+      const img = await og.evaluate(
+        () => document.querySelector('meta[property="og:image"]')?.content,
+      );
+      const body = img ? await (await og.request.get(img)).body() : Buffer.alloc(0);
+      const size = imageSize(body);
+      size?.w === 1200 && size?.h === 630
+        ? ok("fallback og:image is the 1200×630 card")
+        : bad(`fallback og:image is ${size?.w}×${size?.h}`);
+      await og.close();
+    }
+  } catch (e) {
+    bad(`clipboard-less fallback failed: ${e.message}`);
+  }
+  await fctx.close();
 
   /* --------------------------------------------------------------- mobile */
   console.log("\n[mobile: iPhone 15]");
