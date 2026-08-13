@@ -63,15 +63,11 @@ export function builderTitle(name: string, stack: string, seed = 0): string {
   return `${pick(ADJ, base)} ${pick(NOUN, base >>> 9)}`;
 }
 
-/** Short alphanumeric badge id shown on the card, e.g. "GOA-7F3K". */
+/**
+ * The serial printed under the barcode on the pass, e.g. "HH-GOA-873524".
+ * Numeric so it reads as a real ticket number, and stable for a given builder.
+ */
 export function badgeId(name: string, stack: string, seed = 0): string {
   const h = hash(`badge|${name}|${stack}|${seed}`);
-  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-  let out = "";
-  let n = h;
-  for (let i = 0; i < 4; i++) {
-    out += alphabet[n % alphabet.length];
-    n = Math.floor(n / alphabet.length);
-  }
-  return `GOA-${out}`;
+  return `HH-GOA-${String(h % 1_000_000).padStart(6, "0")}`;
 }

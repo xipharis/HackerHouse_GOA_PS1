@@ -8,17 +8,20 @@ Styled to the organiser's identity: the deep green (`#0B6839`), signal yellow
 (`#FEE101`) and cream (`#FFFBE8`) from hhgoa.com, set in the same two faces the
 event site uses — **Imbue** for display and **Victor Mono** for everything else.
 
+The builder pass is its own printed artefact and runs a warmer palette of its
+own — forest `#004838`, pink `#F02878`, yellow `#F8D028` on `#F0E8D0` stock —
+set in **Playfair Display**, **Cabinet Grotesk** and **JetBrains Mono**.
+
 ## Flow
 
 | Route | What it is |
 | --- | --- |
 | [`/`](https://hh-goa-frame-mu.vercel.app) | Landing page with the two entry points |
 | [`/pfp`](https://hh-goa-frame-mu.vercel.app/pfp) | **Format A** — 1024×1024 profile picture in a signal-yellow ring |
-| [`/pass`](https://hh-goa-frame-mu.vercel.app/pass) | **Format B** — 1200×675 builder pass (name, stack, origin, builder title, travel dates) |
+| [`/pass`](https://hh-goa-frame-mu.vercel.app/pass) | **Format B** — 1080×1350 builder pass (name, stack, base camp, builder title, dates) |
 | `/s/[id]` | The link you tweet; its `og:image` *is* the generated graphic |
 
-The pass carries the event's travel window: **arrives 28 Oct 2026 → departs
-31 Oct 2026**.
+The pass carries the event's dates: **28–31 Oct 2026**.
 
 ## How it works
 
@@ -30,7 +33,8 @@ loading screen.
 | --- | --- |
 | Photo intake (HEIC/EXIF/downscale) | [lib/image.ts](lib/image.ts) |
 | Drawing primitives | [lib/render/paint.ts](lib/render/paint.ts) |
-| Both renderers + link-preview card | [lib/render/index.ts](lib/render/index.ts) |
+| Format A + its link-preview card | [lib/render/index.ts](lib/render/index.ts) |
+| Format B, the builder pass | [lib/render/pass.ts](lib/render/pass.ts) |
 | Brand tokens, copy, captions | [lib/brand.ts](lib/brand.ts) |
 | Builder title generator | [lib/titles.ts](lib/titles.ts) |
 | Share persistence | [lib/server/storage.ts](lib/server/storage.ts) |
@@ -43,7 +47,7 @@ loading screen.
 Two buttons, because no single mechanism does both jobs:
 
 - **Share to X** always opens the X compose intent, pre-filled. It uploads the
-  1200×675 graphic first and puts the resulting `/s/<id>` link in the body —
+  1200×630 link card first and puts the resulting `/s/<id>` link in the body —
   that link's `og:image` *is* the graphic, so the post shows the real artwork as
   its preview card rather than a default thumbnail.
 - **Post with image attached** appears only on touch devices and hands the
@@ -169,7 +173,7 @@ npm run test:e2e -- https://hh-goa-frame-mu.vercel.app
 and six photo shapes (portrait, landscape, square, 12 MP HEIC, 36 MP HEIC):
 render correctness and timing, long-name overflow, download, the X intent URL,
 the caption's opening block and both hashtags landing last, and that the
-resulting `og:image` is a real 1200×675 image served over HTTP.
+resulting `og:image` is a real 1200×630 image served over HTTP.
 
 `check-share.mjs` covers both share paths: it stubs a file-capable share sheet
 and asserts a real JPEG is handed over, then stubs a desktop sheet with no X

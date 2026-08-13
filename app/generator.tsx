@@ -9,14 +9,16 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { canvasFonts, ensureFontsReady } from "./fonts";
+import { canvasFonts, ensureFontsReady, passFonts } from "./fonts";
 import { EVENT, OUT, tweetLength, tweetText, type Format } from "@/lib/brand";
 import { TWEET_LIMIT } from "@/lib/tweet";
 import { ImageError, loadPhoto } from "@/lib/image";
 import { builderTitle } from "@/lib/titles";
 import {
+  ensureCoast,
   photoWindow,
   renderCard,
+  renderPassShareCard,
   renderPfp,
   renderPfpShareCard,
   toBlob,
@@ -78,7 +80,11 @@ export default function Generator({ format }: { format: Format }) {
   const title = titleOverride ?? builderTitle(name || "builder", stack, seed);
 
   useEffect(() => {
-    ensureFontsReady().finally(() => setFontsReady(true));
+    // The pass prints a photo of the coast, and a paint is synchronous — both
+    // the faces and that image have to be resident before the first render.
+    Promise.all([ensureFontsReady(), ensureCoast()]).finally(() =>
+      setFontsReady(true),
+    );
   }, []);
 
   /* ------------------------------------------------------------ rendering */
@@ -91,7 +97,7 @@ export default function Generator({ format }: { format: Format }) {
     } else {
       renderCard(canvas, {
         photo,
-        fonts: canvasFonts,
+        fonts: passFonts,
         framing,
         fields: { name, stack, from, title, seed },
       });
@@ -99,7 +105,7 @@ export default function Generator({ format }: { format: Format }) {
   }, [photo, format, framing, name, stack, from, title, seed]);
 
   // Every input change repaints synchronously — no debounce needed, a full
-  // 1200×675 composite is a couple of milliseconds.
+  // composite is a couple of milliseconds.
   useEffect(() => {
     if (fontsReady) draw();
   }, [draw, fontsReady]);
@@ -213,17 +219,29 @@ export default function Generator({ format }: { format: Format }) {
   };
 
   /**
-   * The 1200×675 image posted to X and used for the link preview.
-   * JPEG rather than PNG: ~6× smaller over a phone connection, and the artwork
-   * is all flat fills, so the difference is invisible at card size.
+   * The 1200×630 image posted to X and used for the link preview.
+   *
+   * Neither format is that shape — the pfp is square and the pass is portrait —
+   * so both get composed into a landscape card first, or X would centre-crop
+   * them into a strip. JPEG rather than PNG: ~6× smaller over a phone
+   * connection, and the artwork is all flat fills, so the difference is
+   * invisible at card size.
    */
   const buildShareImage = useCallback(async (): Promise<Blob> => {
     const canvas = canvasRef.current!;
-    if (format === "card") return toBlob(canvas, "image/jpeg", 0.92);
     const sc = shareCanvasRef.current!;
-    renderPfpShareCard(sc, canvas, canvasFonts);
+    if (format === "card") {
+      renderPassShareCard(sc, {
+        photo,
+        fonts: passFonts,
+        framing,
+        fields: { name, stack, from, title, seed },
+      });
+    } else {
+      renderPfpShareCard(sc, canvas, canvasFonts);
+    }
     return toBlob(sc, "image/jpeg", 0.92);
-  }, [format]);
+  }, [format, photo, framing, name, stack, from, title, seed]);
 
   /**
    * Identity of the artwork currently on the canvas. Used to tell whether the
@@ -396,7 +414,11 @@ export default function Generator({ format }: { format: Format }) {
           <div
             onDrop={onDrop}
             onDragOver={(e) => e.preventDefault()}
-            className="relative overflow-hidden rounded-2xl border border-cream/12 bg-forest/20"
+            // The pass is portrait, so it's capped and centred rather than
+            // stretched across the column — full width would run off-screen.
+            className={`relative overflow-hidden rounded-2xl border border-cream/12 bg-forest/20 ${
+              format === "card" ? "mx-auto w-full max-w-[420px] lg:max-w-[460px]" : ""
+            }`}
             style={{ aspectRatio: ratio }}
           >
             <canvas
@@ -496,7 +518,7 @@ export default function Generator({ format }: { format: Format }) {
                 placeholder="Rust · distributed systems"
               />
               <Field
-                label="Travelling from"
+                label="Base camp"
                 value={from}
                 onChange={setFrom}
                 placeholder="Bengaluru, IN"
@@ -602,7 +624,7 @@ export default function Generator({ format }: { format: Format }) {
         </aside>
       </div>
 
-      {/* Off-screen scratch canvas for the Format A link-preview composition. */}
+      {/* Off-screen scratch canvas for the link-preview composition. */}
       <canvas ref={shareCanvasRef} className="hidden" aria-hidden />
     </main>
   );

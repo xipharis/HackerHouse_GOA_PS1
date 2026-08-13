@@ -32,8 +32,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const url = `${origin}/s/${id}`;
   const image = {
     url: share.imageUrl,
-    width: OUT.cardW,
-    height: OUT.cardH,
+    width: OUT.ogW,
+    height: OUT.ogH,
     alt: title,
   };
 
@@ -79,8 +79,8 @@ export default async function SharePage({ params }: Props) {
         <img
           src={share.imageUrl}
           alt={share.name ? `${share.name} — ${EVENT.full}` : EVENT.full}
-          width={OUT.cardW}
-          height={OUT.cardH}
+          width={OUT.ogW}
+          height={OUT.ogH}
           className="w-full rounded-2xl border border-cream/12 shadow-2xl"
         />
 

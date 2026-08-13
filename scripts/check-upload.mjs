@@ -66,7 +66,7 @@ async function pick(locator, file) {
 
 try {
   await pick(dropZone(), "person.jpg");
-  // 1024² for the pfp route, 1200×675 for the pass route — either counts.
+  // 1024² for the pfp route, 1080×1350 for the pass route — either counts.
   await page.waitForFunction(
     () => {
       const c = document.querySelector("canvas");

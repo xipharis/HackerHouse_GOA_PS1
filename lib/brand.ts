@@ -17,6 +17,8 @@ export const EVENT = {
   tagline: "4 days. one rhythm. everything intentional.",
   place: "GOA, INDIA",
   window: "28 – 31 OCT 2026",
+  /** The same dates set tight, for the pass and its link card. */
+  windowShort: "28-31 OCT 2026",
   host: "2:47 pm Studio",
   hostHandle: "@247pmstudio",
   /** Printed on the builder pass. */
@@ -38,6 +40,22 @@ export const C = {
   lime: "#9FD356",
 } as const;
 
+/**
+ * The builder pass runs its own, warmer palette: a deeper forest, a softer
+ * cream card stock and a pink that the site never uses. Kept separate from `C`
+ * so the pass can look like a printed pass without dragging the site with it.
+ */
+export const PASS = {
+  green: "#004838",
+  ink: "#001A12",
+  yellow: "#F8D028",
+  pink: "#F02878",
+  pinkDeep: "#C81D5F",
+  cream: "#F0E8D0",
+  /** The info panel, a shade darker than the card stock. */
+  stock: "#E0D8B8",
+} as const;
+
 /** Yellow→lime sweep used for rings and rules. */
 export const SIGNAL: readonly [number, string][] = [
   [0, C.yellow],
@@ -48,9 +66,12 @@ export const SIGNAL: readonly [number, string][] = [
 export const OUT = {
   /** Format A — X profile picture. */
   pfp: 1024,
-  /** Format B / OG link preview — 16:9. */
-  cardW: 1200,
-  cardH: 675,
+  /** Format B — the builder pass, portrait 4:5 like a real pass. */
+  cardW: 1080,
+  cardH: 1350,
+  /** Link preview. Both formats get composed into this before upload. */
+  ogW: 1200,
+  ogH: 630,
 } as const;
 
 export type Format = "pfp" | "card";

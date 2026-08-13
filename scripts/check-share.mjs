@@ -34,7 +34,7 @@ await ctx.addInitScript(() => {
 const p = await ctx.newPage();
 await p.goto(BASE + "/pass", { waitUntil: "networkidle" });
 await p.setInputFiles('input[type="file"]', path.join(process.cwd(), ".fixtures", "person.jpg"));
-await p.waitForFunction(() => document.querySelector("canvas")?.width === 1200, { timeout: 20000 });
+await p.waitForFunction(() => document.querySelector("canvas")?.width === 1080, { timeout: 20000 });
 await p.getByRole("textbox").nth(0).fill("Aparna Krishnamurthy");
 await p.getByRole("textbox").nth(1).fill("Rust · distributed systems");
 // The share image is pre-built on a timer so the click keeps its activation.

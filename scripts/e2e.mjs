@@ -139,7 +139,7 @@ async function run() {
   console.log("\n[format B: builder pass]");
   await page.goto(BASE + "/pass", { waitUntil: "networkidle" });
   await page.setInputFiles('input[type="file"]', path.join(FIX, "person.jpg"));
-  await page.waitForFunction(() => document.querySelector("canvas")?.width === 1200, {
+  await page.waitForFunction(() => document.querySelector("canvas")?.width === 1080, {
     timeout: 20000,
   });
   await page.getByRole("textbox").nth(0).fill("Aparna Krishnamurthy");
@@ -151,9 +151,9 @@ async function run() {
     const c = document.querySelector("canvas");
     return { w: c.width, h: c.height };
   });
-  cardDims.w === 1200 && cardDims.h === 675
-    ? ok("card rendered 1200×675")
-    : bad(`card wrong size ${cardDims.w}×${cardDims.h}`);
+  cardDims.w === 1080 && cardDims.h === 1350
+    ? ok("pass rendered 1080×1350")
+    : bad(`pass wrong size ${cardDims.w}×${cardDims.h}`);
 
   const title = await page.getByRole("textbox").nth(3).inputValue();
   /rust|borrow|zero-cost|memory-safe/i.test(title)
@@ -272,11 +272,11 @@ async function run() {
       size && body.length > 10000
         ? ok(`og:image is a real ${size.type.toUpperCase()} (${(body.length / 1024).toFixed(0)} KB)`)
         : bad(`og:image broken: ${res.status()} ${body.length}b ${img}`);
-      // OG images must be 1200×675 so X renders a wide card, never a crop.
+      // OG images must be 1200×630 so X renders a wide card, never a crop.
       if (size) {
-        size.w === 1200 && size.h === 675
+        size.w === 1200 && size.h === 630
           ? ok(`og:image is ${size.w}×${size.h} (wide card)`)
-          : bad(`og:image is ${size.w}×${size.h}, expected 1200×675`);
+          : bad(`og:image is ${size.w}×${size.h}, expected 1200×630`);
         await writeFile(path.join(OUT, `og-${label}.${size.type === "png" ? "png" : "jpg"}`), body);
       }
     }

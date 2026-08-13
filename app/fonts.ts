@@ -1,4 +1,5 @@
-import { Imbue, Victor_Mono } from "next/font/google";
+import { Imbue, JetBrains_Mono, Playfair_Display, Victor_Mono } from "next/font/google";
+import localFont from "next/font/local";
 
 /**
  * The two faces hhgoa.com uses. Shared by the layout (for CSS) and the canvas
@@ -18,9 +19,43 @@ export const mono = Victor_Mono({
   display: "swap",
 });
 
+/* ---------------------------------------------------------- builder pass */
+
+/**
+ * The builder pass has its own type system — a high-contrast serif for the
+ * lockup and the name, a chunky grotesk for the loud all-caps lines, and a mono
+ * for the small labels. Kept separate from the site faces above: the pass is a
+ * printed artefact, not a page.
+ */
+export const passSerif = Playfair_Display({
+  subsets: ["latin"],
+  display: "swap",
+});
+
+export const passMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+});
+
+/** Cabinet Grotesk isn't on Google Fonts, so the three used cuts ship locally. */
+export const passGrotesk = localFont({
+  src: [
+    { path: "./_fonts/CabinetGrotesk-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./_fonts/CabinetGrotesk-Bold.woff2", weight: "700", style: "normal" },
+    { path: "./_fonts/CabinetGrotesk-Extrabold.woff2", weight: "800", style: "normal" },
+  ],
+  display: "swap",
+});
+
 export const canvasFonts = {
   display: display.style.fontFamily,
   mono: mono.style.fontFamily,
+};
+
+export const passFonts = {
+  serif: passSerif.style.fontFamily,
+  grotesk: passGrotesk.style.fontFamily,
+  mono: passMono.style.fontFamily,
 };
 
 /**
@@ -35,9 +70,15 @@ export async function ensureFontsReady() {
     `700 40px ${canvasFonts.display}`,
     `700 24px ${canvasFonts.mono}`,
     `500 20px ${canvasFonts.mono}`,
+    `900 76px ${passFonts.serif}`,
+    `800 30px ${passFonts.grotesk}`,
+    `700 22px ${passFonts.grotesk}`,
+    `700 18px ${passFonts.mono}`,
+    `400 16px ${passFonts.mono}`,
   ];
   await Promise.all(
-    specs.map((s) => document.fonts.load(s).catch(() => undefined)),
+    // "Aa0" forces the subset that actually carries the glyphs we measure.
+    specs.map((s) => document.fonts.load(s, "Aa0").catch(() => undefined)),
   );
   await document.fonts.ready;
 }
