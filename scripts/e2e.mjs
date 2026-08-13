@@ -43,6 +43,22 @@ function imageSize(buf) {
   return null;
 }
 
+/** X weighted length: URLs cost 23, emoji cost 2. Free accounts cap at 280. */
+function tweetWeight(text) {
+  let t = 0;
+  for (const ch of text.replace(/https?:\/\/\S+/gi, "x".repeat(23))) {
+    const cp = ch.codePointAt(0);
+    t +=
+      cp <= 0x10ff ||
+      (cp >= 0x2000 && cp <= 0x200d) ||
+      (cp >= 0x2010 && cp <= 0x201f) ||
+      (cp >= 0x2032 && cp <= 0x2037)
+        ? 1
+        : 2;
+  }
+  return t;
+}
+
 async function saveCanvas(page, selector, file) {
   const dataUrl = await page.evaluate(
     (sel) => document.querySelector(sel)?.toDataURL("image/png") ?? null,
@@ -203,17 +219,23 @@ async function run() {
         ? ok("caption carries #HHGoa2026")
         : bad(`#HHGoa2026 missing: ${text}`);
       (label === "card"
-        ? /^😋Embracing the vibe of Hacker House @2026/.test(text)
-        : /^😋 New PFP, same Hacker House @2026 energy/.test(text))
+        ? /^😋 Hacker House Goa 2026/.test(text)
+        : /^😋 New PFP, Hacker House Goa 2026 energy/.test(text))
         ? ok(`caption uses the ${label} opening`)
         : bad(`wrong opening line for ${label}: ${text.slice(0, 60)}`);
-      /Embrace with me the vibe of Less noise and more signal/.test(text)
+      /😼 Less noise\. More signal\./.test(text)
         ? ok("caption carries the signal line")
         : bad("signal line missing from caption");
       text.trimEnd().endsWith("#FrameInGoa #HHGoa2026")
         ? ok("hashtags land last")
         : bad(`caption does not end with the hashtags: ${JSON.stringify(text.slice(-40))}`);
       shareUrl ? ok(`share link in body: ${shareUrl}`) : bad("no share link in caption");
+
+      const weight = tweetWeight(text);
+      weight <= 280
+        ? ok(`caption fits a free account (${weight}/280)`)
+        : bad(`caption is ${weight}/280 — over the free limit`);
+
       extraChecks?.(text);
       await popup.close();
     } catch (e) {

@@ -5,6 +5,8 @@
  * generated graphics read as part of the event, not as a third-party tool.
  */
 
+import { clampWeighted, TWEET_LIMIT, URL_COST, weightedLength } from "./tweet";
+
 export const EVENT = {
   name: "HH Goa",
   year: "2026",
@@ -56,52 +58,94 @@ export type Format = "pfp" | "card";
 /**
  * Pre-filled post copy.
  *
+ * Must fit 280 characters: X Premium is not a fair assumption, and an over-long
+ * pre-fill lands in the composer with Post already greyed out. The copy is kept
+ * lean enough that even three maxed-out fields fit, and the user's own text is
+ * trimmed as a last resort rather than the post silently breaking.
+ *
  * The link is embedded in the body rather than passed as the intent's `url`
  * parameter, because X appends that parameter at the end and would break the
  * ordering — the hashtags have to land last. X still unfurls a URL found in the
  * body, so the link preview works either way.
- *
- * The two formats get their own opening block: the pass lists the details the
- * user typed, while the PFP collects none, so it uses standing copy rather than
- * the pass template with holes in it.
  */
-export function tweetText(opts: {
+
+const SIGNAL_LINE = "😼 Less noise. More signal.";
+const TAGS = `${EVENT.hashtag} #HHGoa2026`;
+
+type TweetOpts = {
   format: Format;
   name?: string;
   stack?: string;
   title?: string;
   link: string;
-}) {
-  const detail = (emoji: string, label: string, value?: string) => {
-    const v = value?.trim();
-    return v ? `${emoji} ${label} - ${v}` : null;
-  };
+};
 
-  const opening =
-    opts.format === "card"
+function compose(
+  format: Format,
+  link: string,
+  name: string,
+  stack: string,
+  title: string,
+): string {
+  const line = (emoji: string, label: string, value: string) =>
+    value ? `${emoji} ${label} - ${value}` : null;
+
+  const body =
+    format === "card"
       ? [
-          "😋Embracing the vibe of Hacker House @2026 🎶",
-          detail("😎", "My name", opts.name),
-          detail("👤", "My Role", opts.stack),
-          detail("🥷", "My alias/builder title", opts.title),
+          "😋 Hacker House Goa 2026 🎶",
+          line("😎", "My name", name),
+          line("👤", "My Role", stack),
+          line("🥷", "My alias/builder title", title),
+          "",
+          SIGNAL_LINE,
+          "",
+          "Make your own 🪪",
         ]
       : [
-          "😋 New PFP, same Hacker House @2026 energy 🎶",
-          "🌴 Framed for Goa. Locked in for the build-station.",
+          "😋 New PFP, Hacker House Goa 2026 energy 🎶",
+          "🌴 Framed for the build-station.",
+          "",
+          SIGNAL_LINE,
+          "",
+          "Frame your own 🖼",
         ];
 
-  return [
-    ...opening,
-    "",
-    "😼 Embrace with me the vibe of Less noise and more signal:- ",
-    "",
-    opts.format === "card"
-      ? "Create your own Builder Badge -> 🪪"
-      : "Frame your own PFP -> 🖼️",
-    opts.link,
-    "",
-    `${EVENT.hashtag} #HHGoa2026`,
-  ]
-    .filter((line) => line !== null)
-    .join("\n");
+  return [...body, link, "", TAGS].filter((l) => l !== null).join("\n");
+}
+
+export function tweetText(opts: TweetOpts): string {
+  const tidy = (v?: string) => v?.replace(/\s+/g, " ").trim() ?? "";
+  let name = tidy(opts.name);
+  let stack = tidy(opts.stack);
+  let title = tidy(opts.title);
+
+  let out = compose(opts.format, opts.link, name, stack, title);
+  if (weightedLength(out) <= TWEET_LIMIT) return out;
+
+  // Over budget: shave the longest field one character at a time so the loss is
+  // spread across whichever entries are actually long, rather than always
+  // gutting the last one.
+  for (let guard = 0; guard < 400; guard++) {
+    const fields = [
+      [name, (v: string) => (name = v)] as const,
+      [stack, (v: string) => (stack = v)] as const,
+      [title, (v: string) => (title = v)] as const,
+    ];
+    const longest = fields.reduce((a, b) => (b[0].length > a[0].length ? b : a));
+    if (longest[0].length <= 4) break; // nothing meaningful left to give
+    longest[1](clampWeighted(longest[0], weightedLength(longest[0]) - 2));
+
+    out = compose(opts.format, opts.link, name, stack, title);
+    if (weightedLength(out) <= TWEET_LIMIT) return out;
+  }
+  return out;
+}
+
+/**
+ * Weighted length of the post this input would produce, for the live counter.
+ * The real permalink isn't known until upload, but every URL costs the same.
+ */
+export function tweetLength(opts: Omit<TweetOpts, "link">): number {
+  return weightedLength(tweetText({ ...opts, link: "x".repeat(URL_COST) }));
 }

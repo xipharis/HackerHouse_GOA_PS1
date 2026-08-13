@@ -10,7 +10,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import { canvasFonts, ensureFontsReady } from "./fonts";
-import { EVENT, OUT, tweetText, type Format } from "@/lib/brand";
+import { EVENT, OUT, tweetLength, tweetText, type Format } from "@/lib/brand";
+import { TWEET_LIMIT } from "@/lib/tweet";
 import { ImageError, loadPhoto } from "@/lib/image";
 import { builderTitle } from "@/lib/titles";
 import {
@@ -257,8 +258,14 @@ export default function Generator({ format }: { format: Format }) {
     };
   }, [shareKey, photo, fontsReady, buildShareImage]);
 
-  const caption = (link: string) =>
-    tweetText({ format, name, stack, title: format === "card" ? title : undefined, link });
+  const captionFields = {
+    format,
+    name,
+    stack,
+    title: format === "card" ? title : undefined,
+  };
+  const caption = (link: string) => tweetText({ ...captionFields, link });
+  const captionChars = tweetLength(captionFields);
 
   /** Uploads the graphic and returns the /s/<id> permalink that unfurls to it. */
   const uploadShare = async (img: Blob) => {
@@ -557,6 +564,13 @@ export default function Generator({ format }: { format: Format }) {
             >
               COPY CAPTION
             </button>
+
+            <p className="flex items-center justify-between text-[10px] text-cream/30">
+              <span>POST LENGTH</span>
+              <span className={captionChars > TWEET_LIMIT ? "text-signal" : ""}>
+                {captionChars} / {TWEET_LIMIT}
+              </span>
+            </p>
 
             <p className="text-[10px] leading-relaxed text-cream/30">
               {canShareFiles

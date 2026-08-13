@@ -1,6 +1,6 @@
 # HH Goa 2026 — Frame & Builder Pass Generator
 
-### → **[hh-goa-frame-mu.vercel.app](https://hh-goa-frame-mu.vercel.app)**
+### **[hh-goa-frame-mu.vercel.app](https://hh-goa-frame-mu.vercel.app)**
 
 Upload a photo, get a branded HH Goa 2026 graphic, download it, post it to X.
 
@@ -66,9 +66,22 @@ Four details that matter in practice:
 - Format A uploads a purpose-built 16:9 composition rather than the square
   avatar, so X never centre-crops the ring off.
 
-Caption copy lives in `tweetText` in [lib/brand.ts](lib/brand.ts); the two
-formats differ only in their opening block and share everything from the "less
-noise, more signal" line down.
+### Post length
+
+Captions must fit **280 characters** — X Premium is not a fair assumption, and an
+over-long pre-fill lands in the composer with Post already greyed out.
+
+X does not count naively: any URL costs 23 whatever its real length, and emoji
+cost 2 each. [lib/tweet.ts](lib/tweet.ts) implements that weighting; `tweetText`
+in [lib/brand.ts](lib/brand.ts) composes within it and, if a caption would still
+overflow, shaves the longest user field one character at a time so the loss is
+spread rather than always gutting the last entry. The hashtags and the link are
+never sacrificed.
+
+Measured: PFP 172, pass with typical fields 249, pass with three maxed-out
+40-character fields 279. The generator shows a live count next to the share
+buttons. `npm run test:caption` asserts the ceiling with an independently
+implemented counter, so a bug copied into both would not pass.
 
 ### Uploading
 
@@ -142,6 +155,7 @@ vercel project protection disable --sso
 npm run fixtures                                    # generate a test photo
 npm run test:e2e -- http://localhost:3000           # full flow, both formats
 npm run test:share -- http://localhost:3000         # both share paths
+npm run test:caption -- http://localhost:3000      # every caption fits 280
 npm run test:upload -- http://localhost:3000/pfp webkit
 ```
 

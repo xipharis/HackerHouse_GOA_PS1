@@ -47,7 +47,7 @@ check("navigator.share was called", !!shared);
 check("an actual image file was attached", (shared?.files?.length ?? 0) === 1,
       shared ? `${shared.files[0]?.type} ${(shared.files[0]?.size / 1024).toFixed(0)}KB` : "none");
 check("attachment is a real JPEG payload", (shared?.files?.[0]?.size ?? 0) > 20000);
-check("caption travelled with the image", /Embracing the vibe/.test(shared?.text ?? ""));
+check("caption travelled with the image", /Hacker House Goa 2026/.test(shared?.text ?? ""));
 check("caption has the name line", /My name - Aparna/.test(shared?.text ?? ""));
 check("caption has both hashtags", /#FrameInGoa #HHGoa2026/.test(shared?.text ?? ""));
 check("no popup was opened", p.context().pages().length === 1);
@@ -86,9 +86,8 @@ try {
   // This page is /pfp, which has its own opening line; the signal line is the
   // part both formats share.
   check("pfp caption survives the fallback",
-        /New PFP, same Hacker House @2026 energy/.test(text));
-  check("signal line survives the fallback",
-        /Embrace with me the vibe of Less noise and more signal/.test(text));
+        /New PFP, Hacker House Goa 2026 energy/.test(text));
+  check("signal line survives the fallback", /😼 Less noise\. More signal\./.test(text));
   check("link is in the body, not appended after the hashtags",
         text.trimEnd().endsWith("#FrameInGoa #HHGoa2026"));
 } catch (e) {

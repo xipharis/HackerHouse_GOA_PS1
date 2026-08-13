@@ -11,7 +11,8 @@
     "fixtures": "node scripts/mkfixture.mjs",
     "test:share": "node scripts/check-share.mjs",
     "test:upload": "node scripts/check-upload.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "test:caption": "node scripts/check-caption.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
