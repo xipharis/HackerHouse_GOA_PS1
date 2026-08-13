@@ -15,13 +15,23 @@ export type Format = "pfp" | "card";
 
 export type ShareMeta = {
   id: string;
+  /** The 1200×630 link card — what X unfurls as the post's preview. */
   imageUrl: string;
+  /**
+   * The graphic at its own aspect ratio (the portrait pass, or the square pfp).
+   * X can only unfurl one image, so this is what the share page shows and what
+   * the download link hands over.
+   */
+  rawUrl?: string;
   contentType: string;
   format: Format;
   name?: string;
   title?: string;
   createdAt: string;
 };
+
+/** One stored image: the bytes and the type they were sniffed as. */
+export type Upload = { data: Buffer; contentType: string };
 
 const PREFIX = "shares";
 /** Named to avoid the `use*` prefix, which reads as a React hook to linters. */
@@ -41,21 +51,38 @@ export function newId(): string {
 export async function saveShare(
   id: string,
   data: Buffer,
-  meta: Omit<ShareMeta, "id" | "imageUrl" | "createdAt">,
+  meta: Omit<ShareMeta, "id" | "imageUrl" | "rawUrl" | "createdAt">,
+  raw?: Upload,
 ): Promise<ShareMeta> {
   const createdAt = new Date().toISOString();
   const ext = meta.contentType === "image/png" ? "png" : "jpg";
+  const rawExt = raw?.contentType === "image/png" ? "png" : "jpg";
 
   if (blobEnabled()) {
     const { put } = await import("@vercel/blob");
-    const image = await put(`${PREFIX}/${id}/card.${ext}`, data, {
-      access: "public",
-      contentType: meta.contentType,
+    const blobOpts = {
+      access: "public" as const,
       addRandomSuffix: false,
       allowOverwrite: true,
       cacheControlMaxAge: 60 * 60 * 24 * 365,
+    };
+    const image = await put(`${PREFIX}/${id}/card.${ext}`, data, {
+      ...blobOpts,
+      contentType: meta.contentType,
     });
-    const full: ShareMeta = { id, imageUrl: image.url, createdAt, ...meta };
+    const rawBlob = raw
+      ? await put(`${PREFIX}/${id}/raw.${rawExt}`, raw.data, {
+          ...blobOpts,
+          contentType: raw.contentType,
+        })
+      : null;
+    const full: ShareMeta = {
+      id,
+      imageUrl: image.url,
+      rawUrl: rawBlob?.url,
+      createdAt,
+      ...meta,
+    };
     await put(`${PREFIX}/${id}/meta.json`, JSON.stringify(full), {
       access: "public",
       contentType: "application/json",
@@ -68,9 +95,12 @@ export async function saveShare(
 
   await fs.mkdir(localDir, { recursive: true });
   await fs.writeFile(path.join(localDir, `${id}.${ext}`), data);
+  if (raw) await fs.writeFile(path.join(localDir, `${id}.raw.${rawExt}`), raw.data);
+  const origin = await requestSiteUrl();
   const full: ShareMeta = {
     id,
-    imageUrl: `${await requestSiteUrl()}/api/image/${id}`,
+    imageUrl: `${origin}/api/image/${id}`,
+    rawUrl: raw ? `${origin}/api/image/${id}?v=raw` : undefined,
     createdAt,
     ...meta,
   };
@@ -109,18 +139,20 @@ export async function getShare(id: string): Promise<ShareMeta | null> {
   }
 }
 
-/** Local-only: raw image bytes, served by /api/image/[id] in dev. */
+/** Local-only: image bytes, served by /api/image/[id] in dev. */
 export async function readLocalImage(
   id: string,
+  variant: "card" | "raw" = "card",
 ): Promise<{ body: Buffer; contentType: string } | null> {
   if (blobEnabled()) return null;
   if (!/^[a-z0-9]{4,32}$/i.test(id)) return null;
+  const stem = variant === "raw" ? `${id}.raw` : id;
   for (const [ext, contentType] of [
     ["png", "image/png"],
     ["jpg", "image/jpeg"],
   ] as const) {
     try {
-      return { body: await fs.readFile(path.join(localDir, `${id}.${ext}`)), contentType };
+      return { body: await fs.readFile(path.join(localDir, `${stem}.${ext}`)), contentType };
     } catch {
       /* try the next extension */
     }

@@ -66,6 +66,15 @@ export default async function SharePage({ params }: Props) {
   const share = await getShare(id);
   if (!share) notFound();
 
+  // The graphic at its own aspect ratio when it was uploaded; older shares only
+  // have the landscape link card.
+  const art = share.rawUrl ?? share.imageUrl;
+  const size = share.rawUrl
+    ? share.format === "card"
+      ? { w: OUT.cardW, h: OUT.cardH, cap: "max-w-md" }
+      : { w: OUT.pfp, h: OUT.pfp, cap: "max-w-sm" }
+    : { w: OUT.ogW, h: OUT.ogH, cap: "" };
+
   return (
     <div className="grain relative min-h-dvh overflow-hidden bg-ink">
       <Ambience />
@@ -77,11 +86,11 @@ export default async function SharePage({ params }: Props) {
             gain — and the source is a Blob CDN URL that changes per share. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={share.imageUrl}
+          src={art}
           alt={share.name ? `${share.name} — ${EVENT.full}` : EVENT.full}
-          width={OUT.ogW}
-          height={OUT.ogH}
-          className="w-full rounded-2xl border border-cream/12 shadow-2xl"
+          width={size.w}
+          height={size.h}
+          className={`w-full rounded-2xl border border-cream/12 shadow-2xl ${size.cap}`}
         />
 
         <p className="mt-10 text-[11px] tracking-[0.24em] text-signal">
@@ -110,8 +119,8 @@ export default async function SharePage({ params }: Props) {
         </div>
 
         <a
-          href={share.imageUrl}
-          download={`hh-goa-2026-${share.id}.png`}
+          href={art}
+          download={`hh-goa-2026-${share.id}.jpg`}
           className="mt-6 text-[11px] tracking-[0.16em] text-cream/40 underline-offset-4 hover:text-signal hover:underline"
         >
           DOWNLOAD THIS IMAGE

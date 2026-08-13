@@ -219,15 +219,23 @@ export default function Generator({ format }: { format: Format }) {
   };
 
   /**
-   * The 1200×630 image posted to X and used for the link preview.
+   * The two images a post carries.
    *
-   * Neither format is that shape — the pfp is square and the pass is portrait —
-   * so both get composed into a landscape card first, or X would centre-crop
-   * them into a strip. JPEG rather than PNG: ~6× smaller over a phone
-   * connection, and the artwork is all flat fills, so the difference is
-   * invisible at card size.
+   * `card` is 1200×630 — neither format is that shape (the pfp is square, the
+   * pass is portrait), so both get composed into a landscape card, or X would
+   * centre-crop them into a strip when it unfurls the link.
+   *
+   * `raw` is the graphic itself, uncropped and uncomposed. It's what the share
+   * page shows, what the download link hands over, and the first file attached
+   * when the share sheet can carry one.
+   *
+   * JPEG rather than PNG: ~6× smaller over a phone connection, and the artwork
+   * is all flat fills, so the difference is invisible.
    */
-  const buildShareImage = useCallback(async (): Promise<Blob> => {
+  const buildShareImages = useCallback(async (): Promise<{
+    card: Blob;
+    raw: Blob;
+  }> => {
     const canvas = canvasRef.current!;
     const sc = shareCanvasRef.current!;
     if (format === "card") {
@@ -240,7 +248,11 @@ export default function Generator({ format }: { format: Format }) {
     } else {
       renderPfpShareCard(sc, canvas, canvasFonts);
     }
-    return toBlob(sc, "image/jpeg", 0.92);
+    const [card, raw] = await Promise.all([
+      toBlob(sc, "image/jpeg", 0.92),
+      toBlob(canvas, "image/jpeg", 0.95),
+    ]);
+    return { card, raw };
   }, [format, photo, framing, name, stack, departure, title, seed]);
 
   /**
@@ -259,14 +271,14 @@ export default function Generator({ format }: { format: Format }) {
    * activation is alive, and awaiting a canvas encode is enough to lose it. So
    * the blob has to be ready *before* the user clicks, not after.
    */
-  const prebuilt = useRef<{ key: string; blob: Blob } | null>(null);
+  const prebuilt = useRef<{ key: string; card: Blob; raw: Blob } | null>(null);
   useEffect(() => {
     if (!photo || !fontsReady) return;
     let cancelled = false;
     const t = setTimeout(() => {
-      buildShareImage()
-        .then((blob) => {
-          if (!cancelled) prebuilt.current = { key: shareKey, blob };
+      buildShareImages()
+        .then(({ card, raw }) => {
+          if (!cancelled) prebuilt.current = { key: shareKey, card, raw };
         })
         .catch(() => undefined);
     }, 400);
@@ -274,7 +286,13 @@ export default function Generator({ format }: { format: Format }) {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [shareKey, photo, fontsReady, buildShareImage]);
+  }, [shareKey, photo, fontsReady, buildShareImages]);
+
+  /** The pre-built pair if it still matches the canvas, otherwise a fresh one. */
+  const shareImages = () =>
+    prebuilt.current?.key === shareKey
+      ? Promise.resolve(prebuilt.current)
+      : buildShareImages();
 
   const captionFields = {
     format,
@@ -285,10 +303,11 @@ export default function Generator({ format }: { format: Format }) {
   const caption = (link: string) => tweetText({ ...captionFields, link });
   const captionChars = tweetLength(captionFields);
 
-  /** Uploads the graphic and returns the /s/<id> permalink that unfurls to it. */
-  const uploadShare = async (img: Blob) => {
+  /** Uploads both images and returns the /s/<id> permalink that unfurls to them. */
+  const uploadShare = async (img: { card: Blob; raw: Blob }) => {
     const body = new FormData();
-    body.append("image", img, "share.jpg");
+    body.append("image", img.card, "share.jpg");
+    body.append("raw", img.raw, filename().replace(/\.png$/, ".jpg"));
     body.append("format", format);
     if (name) body.append("name", name);
     if (format === "card") body.append("title", title);
@@ -317,10 +336,9 @@ export default function Generator({ format }: { format: Format }) {
 
     // Opened synchronously so Safari doesn't treat it as a blocked popup.
     const win = window.open("about:blank", "_blank");
-    const ready = prebuilt.current?.key === shareKey ? prebuilt.current.blob : null;
 
     try {
-      const url = await uploadShare(ready ?? (await buildShareImage()));
+      const url = await uploadShare(await shareImages());
       // The link goes inside the body, not the intent's `url` parameter, which
       // X would append after the hashtags and break the layout.
       const intent = `https://x.com/intent/post?text=${encodeURIComponent(caption(url))}`;
@@ -339,25 +357,35 @@ export default function Generator({ format }: { format: Format }) {
   };
 
   /**
-   * Hands the actual image file to the share sheet, which on a phone includes
-   * the X app and produces a post with a true image attachment. Only offered on
+   * Hands the actual image files to the share sheet, which on a phone includes
+   * the X app and produces a post with true image attachments. Only offered on
    * touch devices for the reason above.
+   *
+   * Both images go: the graphic itself first, so it leads the post, then the
+   * landscape card. Sheets that refuse multiple files fall back to the graphic
+   * alone rather than dropping the share.
    */
   const shareWithImage = async () => {
     if (!photo) return;
     setNote(null);
-    const ready = prebuilt.current?.key === shareKey ? prebuilt.current.blob : null;
     try {
-      const blob = ready ?? (await buildShareImage());
-      const file = new File([blob], filename().replace(/\.png$/, ".jpg"), {
-        type: "image/jpeg",
-      });
-      if (!navigator.canShare?.({ files: [file] })) {
+      const { card, raw } = await shareImages();
+      const base = filename().replace(/\.png$/, "");
+      const files = [
+        new File([raw], `${base}.jpg`, { type: "image/jpeg" }),
+        new File([card], `${base}-card.jpg`, { type: "image/jpeg" }),
+      ];
+      const attach = navigator.canShare?.({ files })
+        ? files
+        : navigator.canShare?.({ files: [files[0]] })
+          ? [files[0]]
+          : null;
+      if (!attach) {
         setNote("This device can't attach images — use Share to X.");
         return;
       }
       await navigator.share({
-        files: [file],
+        files: attach,
         // The site itself, so no upload is needed and the sheet opens inside
         // the click's activation window.
         text: caption(`${window.location.origin}/${format === "card" ? "pass" : "pfp"}`),
@@ -375,11 +403,7 @@ export default function Generator({ format }: { format: Format }) {
       let link = shareUrl;
       if (!link) {
         setSharing(true);
-        link = await uploadShare(
-          prebuilt.current?.key === shareKey
-            ? prebuilt.current.blob
-            : await buildShareImage(),
-        );
+        link = await uploadShare(await shareImages());
       }
       await navigator.clipboard.writeText(caption(link));
       setNote("Caption copied. Download the image and attach it in X.");

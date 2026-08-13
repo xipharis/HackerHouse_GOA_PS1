@@ -44,9 +44,13 @@ await p.waitForTimeout(1200);
 
 const shared = await p.evaluate(() => window.__shared);
 check("navigator.share was called", !!shared);
-check("an actual image file was attached", (shared?.files?.length ?? 0) === 1,
-      shared ? `${shared.files[0]?.type} ${(shared.files[0]?.size / 1024).toFixed(0)}KB` : "none");
-check("attachment is a real JPEG payload", (shared?.files?.[0]?.size ?? 0) > 20000);
+// Both images go: the pass itself first, then the landscape link card.
+check("both images were attached", (shared?.files?.length ?? 0) === 2,
+      shared ? shared.files.map((f) => `${f.name} ${(f.size / 1024).toFixed(0)}KB`).join(", ") : "none");
+check("the raw pass leads the post", /^hh-goa-2026-pass-[a-z-]+\.jpg$/.test(shared?.files?.[0]?.name ?? ""));
+check("the link card follows it", /-card\.jpg$/.test(shared?.files?.[1]?.name ?? ""));
+check("attachments are real JPEG payloads",
+      (shared?.files ?? []).every((f) => f.type === "image/jpeg" && f.size > 20000));
 check("caption travelled with the image", /Hacker House Goa 2026/.test(shared?.text ?? ""));
 check("caption has the name line", /My name - Aparna/.test(shared?.text ?? ""));
 check("caption has both hashtags", /#FrameInGoa #HHGoa2026/.test(shared?.text ?? ""));

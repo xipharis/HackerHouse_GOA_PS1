@@ -46,13 +46,16 @@ loading screen.
 
 Two buttons, because no single mechanism does both jobs:
 
-- **Share to X** always opens the X compose intent, pre-filled. It uploads the
-  1200×630 link card first and puts the resulting `/s/<id>` link in the body —
-  that link's `og:image` *is* the graphic, so the post shows the real artwork as
-  its preview card rather than a default thumbnail.
-- **Post with image attached** appears only on touch devices and hands the
-  actual JPEG to the share sheet via the Web Share API, producing a post with a
-  true image attachment.
+- **Share to X** always opens the X compose intent, pre-filled. It uploads two
+  images first — the 1200×630 link card and the graphic at its own aspect ratio
+  — and puts the resulting `/s/<id>` link in the body. That link's `og:image` is
+  the link card, so the post's preview shows real artwork rather than a default
+  thumbnail, and the page behind it shows (and downloads) the uncropped graphic.
+  An intent URL cannot carry a file, so this is the only image a desktop post
+  can show.
+- **Post with image attached** appears only on touch devices and hands both
+  JPEGs — the graphic first, then the link card — to the share sheet via the Web
+  Share API, producing a post with two true image attachments.
 
 The split matters: the Web Share API can carry a file but on desktop it opens
 the *operating system's* sheet (AirDrop, Mail, Messages), which frequently has no
