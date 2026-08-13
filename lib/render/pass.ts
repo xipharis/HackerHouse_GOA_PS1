@@ -21,8 +21,8 @@ export type PassFonts = { serif: string; grotesk: string; mono: string };
 export type PassFields = {
   name: string;
   stack: string;
-  /** Printed as BASE CAMP. Falls back to the event's own location. */
-  from?: string;
+  /** Where the builder is flying in from. Printed as DEPARTING FROM. */
+  departure?: string;
   title: string;
   seed?: number;
 };
@@ -80,16 +80,21 @@ function fitText(
   min: number,
   weight: number,
   family: string,
+  /** Tracking the text will be drawn with, which widens it beyond measureText. */
+  spacing = 0,
 ) {
+  const width = (t: string) =>
+    ctx.measureText(t).width + spacing * Math.max(0, [...t].length - 1);
+
   let size = max;
   const set = (s: number) => (ctx.font = `${weight} ${s}px ${family}`);
-  for (set(size); ctx.measureText(text).width > maxWidth && size > min; ) {
+  for (set(size); width(text) > maxWidth && size > min; ) {
     set((size -= 2));
   }
 
   let out = text;
-  if (ctx.measureText(out).width > maxWidth) {
-    while (out.length > 1 && ctx.measureText(`${out}...`).width > maxWidth) {
+  if (width(out) > maxWidth) {
+    while (out.length > 1 && width(`${out}...`) > maxWidth) {
       out = out.slice(0, -1);
     }
     out = `${out.trimEnd()}...`;
@@ -409,7 +414,7 @@ export function drawPass(
 ) {
   const v = w / OUT.cardW;
   const f = opts.fonts;
-  const { name, stack, from, title, seed = 0 } = opts.fields;
+  const { name, stack, departure, title, seed = 0 } = opts.fields;
   const serif = (weight: number, size: number) => `${weight} ${size * v}px ${f.serif}`;
   const grot = (weight: number, size: number) => `${weight} ${size * v}px ${f.grotesk}`;
   const mono = (weight: number, size: number) => `${weight} ${size * v}px ${f.mono}`;
@@ -622,6 +627,7 @@ export function drawPass(
       20 * v,
       800,
       f.grotesk,
+      1.6 * v,
     );
     ctx.fillStyle = PASS.ink;
     run(ctx, fit.text, x + w / 2, ty + 78 * v, 1.6 * v, "center");
@@ -641,22 +647,32 @@ export function drawPass(
 
   const colL = x + margin + 30 * v;
   const colR = x + w / 2 + 16 * v;
+  /** Width a right-column entry has before it runs into the panel edge. */
+  const colW = x + w - margin - 30 * v - colR;
+
   const entry = (label: string, value: string, ex: number, ey: number) => {
     ctx.fillStyle = PASS.green;
     ctx.font = mono(400, 14);
     run(ctx, label, ex, ey, 2.2 * v);
     ctx.fillStyle = PASS.ink;
-    ctx.font = grot(700, 21);
-    run(ctx, value, ex, ey + 30 * v, 0.6 * v);
+    // Only the typed-in values can be long, so every value is fitted rather
+    // than trusted.
+    const fit = fitText(ctx, value, colW, 21 * v, 13 * v, 700, f.grotesk, 0.6 * v);
+    run(ctx, fit.text, ex, ey + 30 * v, 0.6 * v);
   };
 
-  entry("BASE CAMP", (from?.trim() || EVENT.place).toUpperCase(), colL, boxY + 44 * v);
+  // A 2×2 grid: where the event is against where you're coming from, then the
+  // dates against the mission. The motto that used to sit in the fourth slot is
+  // already carried by MISSION and the header strapline.
+  entry("BASE CAMP", EVENT.place, colL, boxY + 44 * v);
+  entry(
+    "DEPARTING FROM",
+    (departure?.trim() || "—").toUpperCase(),
+    colR,
+    boxY + 44 * v,
+  );
   entry("DATES", EVENT.windowShort, colL, boxY + 114 * v);
-  entry("MISSION", "BUILD · SHIP · REPEAT", colR, boxY + 44 * v);
-
-  ctx.fillStyle = PASS.green;
-  ctx.font = mono(400, 14);
-  run(ctx, `${EVENT.motto}.`, colR, boxY + 144 * v, 1.6 * v);
+  entry("MISSION", "BUILD · SHIP · REPEAT", colR, boxY + 114 * v);
 
   /* ------------------------------------------------------------- the stub */
 

@@ -65,7 +65,7 @@ export default function Generator({ format }: { format: Format }) {
 
   const [name, setName] = useState("");
   const [stack, setStack] = useState("");
-  const [from, setFrom] = useState("");
+  const [departure, setDeparture] = useState("");
   const [seed, setSeed] = useState(0);
   const [titleOverride, setTitleOverride] = useState<string | null>(null);
 
@@ -99,10 +99,10 @@ export default function Generator({ format }: { format: Format }) {
         photo,
         fonts: passFonts,
         framing,
-        fields: { name, stack, from, title, seed },
+        fields: { name, stack, departure, title, seed },
       });
     }
-  }, [photo, format, framing, name, stack, from, title, seed]);
+  }, [photo, format, framing, name, stack, departure, title, seed]);
 
   // Every input change repaints synchronously — no debounce needed, a full
   // composite is a couple of milliseconds.
@@ -235,21 +235,21 @@ export default function Generator({ format }: { format: Format }) {
         photo,
         fonts: passFonts,
         framing,
-        fields: { name, stack, from, title, seed },
+        fields: { name, stack, departure, title, seed },
       });
     } else {
       renderPfpShareCard(sc, canvas, canvasFonts);
     }
     return toBlob(sc, "image/jpeg", 0.92);
-  }, [format, photo, framing, name, stack, from, title, seed]);
+  }, [format, photo, framing, name, stack, departure, title, seed]);
 
   /**
    * Identity of the artwork currently on the canvas. Used to tell whether the
    * pre-built share image is still current.
    */
   const shareKey = useMemo(
-    () => JSON.stringify([format, photoId, name, stack, from, title, seed, framing]),
-    [format, photoId, name, stack, from, title, seed, framing],
+    () => JSON.stringify([format, photoId, name, stack, departure, title, seed, framing]),
+    [format, photoId, name, stack, departure, title, seed, framing],
   );
 
   /**
@@ -518,9 +518,9 @@ export default function Generator({ format }: { format: Format }) {
                 placeholder="Rust · distributed systems"
               />
               <Field
-                label="Base camp"
-                value={from}
-                onChange={setFrom}
+                label="Departing from"
+                value={departure}
+                onChange={setDeparture}
                 placeholder="Bengaluru, IN"
               />
 

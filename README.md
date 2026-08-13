@@ -18,7 +18,7 @@ set in **Playfair Display**, **Cabinet Grotesk** and **JetBrains Mono**.
 | --- | --- |
 | [`/`](https://hh-goa-frame-mu.vercel.app) | Landing page with the two entry points |
 | [`/pfp`](https://hh-goa-frame-mu.vercel.app/pfp) | **Format A** — 1024×1024 profile picture in a signal-yellow ring |
-| [`/pass`](https://hh-goa-frame-mu.vercel.app/pass) | **Format B** — 1080×1350 builder pass (name, stack, base camp, builder title, dates) |
+| [`/pass`](https://hh-goa-frame-mu.vercel.app/pass) | **Format B** — 1080×1350 builder pass (name, stack, departure city, builder title, dates) |
 | `/s/[id]` | The link you tweet; its `og:image` *is* the generated graphic |
 
 The pass carries the event's dates: **28–31 Oct 2026**.
